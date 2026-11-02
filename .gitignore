@@ -12,3 +12,7 @@ __pycache__/
 *.tmp
 
 # Large generated data is intentionally kept (index deliverables).
+
+# Local-only / sensitive notes (do not commit)
+SECURITY-ASSESSMENT.md
+scrape/SECURITY-ASSESSMENT.md
