@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Sign in — Study OS</title>
+    <!-- What Telegram and WhatsApp show when the site's link is shared (this is the page they see). -->
+    <meta name="description" content="Question banks, test series and previous year papers for members. Get your access code from @neet_pg_bot." />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Study OS" />
+    <meta property="og:title" content="Study OS — question banks &amp; test series" />
+    <meta property="og:description" content="For members of the group. Open @neet_pg_bot on Telegram, get your code, and you're in." />
+    <meta property="og:image" content="https://qb.neetpgbot.in/icons/icon-512.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+    <meta name="apple-mobile-web-app-title" content="Study OS" />
+    <style>
+      :root {
+        color-scheme: light dark;
+        --bg: #eef2f7; --card: rgba(255, 255, 255, .86); --ink: #0f172a; --muted: #5b6b82;
+        --line: #dbe3ee; --field: #f6f8fb; --accent: #2563eb; --accent-2: #06b6d4; --bad: #dc2626;
+        --good: #059669; --tg: #2aabee; --bubble: #ffffff;
+        --glow-1: rgba(6, 182, 212, .18); --glow-2: rgba(37, 99, 235, .14);
+        --shadow: 0 24px 60px -20px rgba(15, 23, 42, .25);
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #070d1c; --card: rgba(15, 23, 42, .78); --ink: #e8edf5; --muted: #97a6bd;
+          --line: rgba(148, 163, 184, .16); --field: rgba(2, 6, 23, .55); --accent: #3b82f6;
+          --accent-2: #22d3ee; --bad: #f87171; --good: #34d399; --bubble: #1e293b;
+          --glow-1: rgba(34, 211, 238, .16); --glow-2: rgba(59, 130, 246, .18);
+          --shadow: 0 30px 80px -24px rgba(0, 0, 0, .7);
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center;
+        padding: 28px 16px; color: var(--ink);
+        background:
+          radial-gradient(640px 420px at 12% 8%, var(--glow-1), transparent 70%),
+          radial-gradient(560px 460px at 92% 92%, var(--glow-2), transparent 70%),
+          var(--bg);
+        background-attachment: fixed;
+        font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      }
+      .card {
+        position: relative; width: min(470px, 100%); background: var(--card);
+        border: 1px solid var(--line); border-radius: 22px; padding: 30px 24px 22px; text-align: center;
+        box-shadow: var(--shadow);
+        -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      }
+      /* A thin coloured line across the top edge of the card. */
+      .card::before {
+        content: ""; position: absolute; left: 24px; right: 24px; top: -1px; height: 2px; border-radius: 2px;
+        background: linear-gradient(90deg, transparent, var(--accent-2), var(--accent), transparent);
+      }
+      .mark {
+        width: 56px; height: 56px; margin: 0 auto 12px; border-radius: 17px;
+        background: linear-gradient(135deg, #22d3ee, #0d9488); color: #fff;
+        display: flex; align-items: center; justify-content: center; font-size: 26px; font-weight: 800;
+        box-shadow: 0 10px 28px -8px rgba(13, 148, 136, .75), inset 0 1px 0 rgba(255, 255, 255, .35);
+      }
+      h1 { font-size: 23px; letter-spacing: -.01em; margin: 0 0 4px; }
+      p { margin: 0 0 14px; color: var(--muted); font-size: 14px; }
+      b { color: var(--ink); }
+      /* Where it works: answers "is it for iPhone?" before anyone has to ask. */
+      .where { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin: 0 0 20px; padding: 0; list-style: none; }
+      .where li {
+        font-size: 12px; font-weight: 600; color: var(--muted); padding: 4px 10px; border-radius: 999px;
+        border: 1px solid var(--line); background: var(--field);
+      }
+      /* On a narrow phone the button drops under the box rather than squeezing it. */
+      .code-form { display: flex; flex-wrap: wrap; gap: 8px; }
+      .code-form input {
+        flex: 1 1 150px; min-width: 0; padding: 13px 14px; font-size: 18px; font-weight: 600;
+        letter-spacing: 3px; text-align: center; text-transform: uppercase; border-radius: 12px;
+        border: 1px solid var(--line); background: var(--field); color: var(--ink);
+        font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+        transition: border-color .15s, box-shadow .15s;
+      }
+      .code-form input::placeholder { color: var(--muted); opacity: .55; }
+      .code-form input:focus {
+        outline: none; border-color: var(--accent);
+        box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent);
+      }
+      .code-form button {
+        flex: 1 0 auto; padding: 13px 26px; font-size: 16px; font-weight: 700; border: 0; border-radius: 12px;
+        background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; cursor: pointer;
+        box-shadow: 0 8px 20px -8px rgba(37, 99, 235, .8); transition: transform .12s, filter .15s;
+      }
+      .code-form button:hover { filter: brightness(1.08); }
+      .code-form button:active { transform: translateY(1px); }
+      .code-form button:disabled { opacity: .6; cursor: default; }
+      /* Three numbered steps, joined by a faint line, so nobody wonders what comes next. */
+      .steps { text-align: left; margin-top: 4px; }
+      .step { position: relative; display: flex; gap: 14px; align-items: flex-start; margin: 0 0 22px; }
+      .step:not(:last-child)::after {
+        content: ""; position: absolute; left: 14px; top: 34px; bottom: -18px; width: 2px;
+        background: linear-gradient(var(--accent), transparent); opacity: .35;
+      }
+      .num {
+        width: 30px; height: 30px; border-radius: 50%; color: #fff;
+        background: linear-gradient(135deg, var(--accent-2), var(--accent));
+        font-weight: 800; font-size: 14px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        box-shadow: 0 6px 16px -6px color-mix(in srgb, var(--accent) 80%, transparent);
+      }
+      .num::before { content: attr(data-n); }
+      .step-body { flex: 1; min-width: 0; }
+      .step h2 { font-size: 16px; line-height: 1.35; margin: 4px 0 10px; }
+      .done-tag { display: none; margin-left: 6px; font-size: 12px; font-weight: 700; color: var(--good); }
+      .tg {
+        position: relative; display: flex; align-items: center; gap: 12px;
+        padding: 13px 16px; border-radius: 14px; color: #fff; text-decoration: none;
+        background: linear-gradient(135deg, #2aabee, #1d8fd0);
+        box-shadow: 0 12px 26px -10px rgba(34, 158, 217, .9), inset 0 1px 0 rgba(255, 255, 255, .25);
+        transition: transform .12s, filter .15s;
+      }
+      .tg:hover { filter: brightness(1.07); transform: translateY(-1px); }
+      .tg:active { transform: translateY(0); }
+      /* A soft ring that keeps pulsing out from what to tap, so the eye lands on it. */
+      .tg::after, .tg-btn::after {
+        content: ""; position: absolute; inset: -2px; border-radius: 16px; pointer-events: none;
+        border: 2px solid rgba(42, 171, 238, .7); animation: ring 2.4s ease-out infinite;
+      }
+      @keyframes ring {
+        0% { opacity: .9; transform: scale(1); }
+        70%, 100% { opacity: 0; transform: scale(1.06, 1.18); }
+      }
+      .tg-icon {
+        width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+        background: rgba(255, 255, 255, .18); display: flex; align-items: center; justify-content: center;
+      }
+      .tg-icon svg { width: 21px; height: 21px; }
+      .tg-text { flex: 1; min-width: 0; line-height: 1.3; }
+      .tg-text strong { display: block; font-size: 16px; font-weight: 700; }
+      .tg-text small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 500; opacity: .92; }
+      .tg-go { width: 18px; height: 18px; flex-shrink: 0; opacity: .9; transition: transform .15s; }
+      .tg:hover .tg-go { transform: translateX(3px); }
+      .hint { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
+      .hint.above { margin: 0 0 10px; }
+      .tiny { font-size: 12px; }
+      /* A drawing of the bot's reply, with the button to tap marked. */
+      .chat {
+        padding: 12px; border-radius: 16px; border: 1px dashed var(--line);
+        background: color-mix(in srgb, var(--tg) 7%, var(--field));
+      }
+      .chat-label { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+      .bubble {
+        padding: 9px 12px 10px; border-radius: 14px 14px 14px 4px; background: var(--bubble);
+        box-shadow: 0 1px 2px rgba(15, 23, 42, .12); font-size: 13px; line-height: 1.45; color: var(--ink);
+      }
+      .bubble .who { display: block; font-size: 12.5px; font-weight: 700; color: var(--tg); margin-bottom: 3px; }
+      .bubble .faded { color: var(--muted); }
+      .bubble code {
+        display: inline-block; margin: 2px 0 4px; padding: 1px 6px; border-radius: 6px; font-size: 13.5px; font-weight: 700;
+        letter-spacing: 1px; background: color-mix(in srgb, var(--tg) 14%, transparent); color: var(--ink);
+        font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+      }
+      .tg-btn {
+        position: relative; display: block; margin-top: 5px; padding: 9px 10px; border-radius: 10px;
+        text-align: center; font-size: 13.5px; font-weight: 600; color: #fff;
+        background: color-mix(in srgb, var(--tg) 80%, #0f172a);
+      }
+      .tap-this {
+        display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 9px;
+        font-size: 13px; font-weight: 700; color: var(--tg);
+      }
+      .tap-this span { display: inline-block; animation: nudge 1.2s ease-in-out infinite; }
+      @keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+      /* The two fold-outs: what to do once in, and answers to the usual problems. */
+      details {
+        margin: 0 0 10px; border: 1px solid var(--line); border-radius: 14px; background: var(--field);
+        text-align: left; overflow: hidden;
+      }
+      summary {
+        display: flex; align-items: center; gap: 10px; padding: 12px 14px; cursor: pointer; list-style: none;
+        font-size: 14.5px; font-weight: 700;
+      }
+      summary::-webkit-details-marker { display: none; }
+      summary .ico { font-size: 18px; }
+      summary .label { flex: 1; min-width: 0; }
+      summary .label small { display: block; font-size: 12px; font-weight: 500; color: var(--muted); }
+      summary::after {
+        content: ""; width: 8px; height: 8px; flex-shrink: 0; margin-right: 4px;
+        border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+        transform: rotate(45deg); transition: transform .15s;
+      }
+      details[open] summary::after { transform: rotate(225deg); }
+      .fold { padding: 2px 14px 14px; font-size: 13.5px; color: var(--muted); }
+      .fold ol { margin: 0; padding: 0; list-style: none; counter-reset: s; }
+      .fold ol > li { position: relative; padding: 0 0 12px 34px; counter-increment: s; }
+      .fold ol > li::before {
+        content: counter(s); position: absolute; left: 0; top: 0; width: 22px; height: 22px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800;
+        color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, transparent);
+      }
+      .modes { display: grid; gap: 6px; margin: 8px 0 0; }
+      .mode { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--card); }
+      .mode b { display: block; font-size: 13.5px; }
+      .mode span { font-size: 12.5px; }
+      .tip { margin: 2px 0 0; padding: 9px 11px; border-radius: 10px; font-size: 12.5px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent); }
+      .qa { margin: 0 0 12px; }
+      .qa:last-child { margin: 0; }
+      .qa .q { display: block; margin-bottom: 2px; font-size: 13.5px; font-weight: 700; color: var(--ink); }
+      .owner {
+        display: flex; align-items: center; gap: 12px; margin-top: 4px; padding: 12px 14px; border-radius: 14px;
+        border: 1px solid var(--line); background: var(--field); color: var(--ink); text-decoration: none;
+        font-size: 14px; text-align: left; transition: border-color .15s;
+      }
+      .owner:hover { border-color: var(--accent); }
+      .owner svg { width: 18px; height: 18px; flex-shrink: 0; color: #229ed9; }
+      .owner span { flex: 1; min-width: 0; font-weight: 600; }
+      .owner small { display: block; margin-top: 1px; font-size: 12px; font-weight: 400; color: var(--muted); }
+      .rule { border: 0; border-top: 1px solid var(--line); margin: 6px 0 16px; }
+
+      /* Arrived from the bot's button with the code already in: steps 1 and 2 are done,
+         so fold them to a tick and put step 3 in front. */
+      .has-code .step.early .detail { display: none; }
+      .has-code .step.early { margin-bottom: 12px; }
+      .has-code .step.early::after { top: 30px; bottom: -10px; }
+      .has-code .step.early .num { background: var(--good); box-shadow: none; }
+      .has-code .step.early .num::before { content: "\2713"; }
+      .has-code .step.early h2 { margin: 4px 0 0; color: var(--muted); font-weight: 600; }
+      .has-code .done-tag { display: inline; }
+      .has-code .step.last .step-body {
+        padding: 10px 12px 12px; margin-top: -6px; border-radius: 14px;
+        background: color-mix(in srgb, var(--accent) 8%, transparent);
+        border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+      }
+      .has-code .step.last .detail-typing { display: none; }
+
+      @media (max-width: 380px) {
+        .card { padding: 26px 16px 20px; }
+        .step { gap: 10px; }
+        .tg { padding: 12px; gap: 10px; }
+        .tg-icon { width: 34px; height: 34px; }
+        .has-code .step.last .step-body { padding: 10px 10px 12px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .tg::after, .tg-btn::after { animation: none; opacity: 0; }
+        .tap-this span { animation: none; }
+        .tg, .tg-go, .code-form button { transition: none; }
+      }
+      .msg { margin: 0 0 18px; padding: 10px 12px; border-radius: 12px; font-size: 13.5px; display: none; }
+      .msg.show { display: block; }
+      .msg.error { background: color-mix(in srgb, var(--bad) 12%, transparent); color: var(--bad); }
+      .msg.info { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main class="card">
+      <div class="mark">S</div>
+      <h1>Study OS</h1>
+      <p>Three easy steps, about a minute. You only do this once on each phone or laptop.</p>
+      <ul class="where" aria-label="Where it works">
+        <li>&#128241; iPhone &amp; iPad</li><li>&#129302; Android</li><li>&#128187; Laptop</li><li>&#10024; No app to install</li>
+      </ul>
+
+      <div class="msg" id="msg"></div>
+
+      <div class="steps">
+        <div class="step early">
+          <div class="num" data-n="1"></div>
+          <div class="step-body">
+            <h2>Get your code from our Telegram bot<span class="done-tag">Done</span></h2>
+            <div class="detail">
+              <a class="tg" href="https://t.me/Neetpgbotwebmaintainbot?start=code" target="_blank" rel="noopener">
+                <span class="tg-icon">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.3-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.2 13 1.4 11.5c-1-.3-1-1 .2-1.5L20.5 2.9c.9-.3 1.6.2 1.4 1.4z"/></svg>
+                </span>
+                <span class="tg-text">
+                  <strong>Open the bot</strong>
+                  <small>&#128070; Tap here &mdash; Telegram opens</small>
+                </span>
+                <svg class="tg-go" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </a>
+              <p class="hint">In Telegram, tap <b>START</b> at the bottom (or send <b>/code</b>). The bot answers
+                straight away, any time of day, with your personal code &mdash; it looks like <b>ABCD-EFGH</b>.
+                Please don't message the owner for a code; only the bot gives them.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="step early">
+          <div class="num" data-n="2"></div>
+          <div class="step-body">
+            <h2>Tap the button under the bot's message<span class="done-tag">Done</span></h2>
+            <div class="detail">
+              <div class="chat" aria-label="What the bot's message looks like">
+                <p class="chat-label">The bot's message looks like this</p>
+                <div class="bubble">
+                  <span class="who">Website maintainer</span>
+                  Your code (tap it to copy):<br />
+                  <code>ABCD-EFGH</code><br />
+                  <span class="faded">Easiest way: tap the button below&hellip;</span>
+                </div>
+                <div class="tg-btn">&#127760; Open the website (code filled in)</div>
+                <div class="tap-this"><span>&#128070;</span> Tap this button</div>
+              </div>
+              <p class="hint">This page opens again with your code already typed in for you.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="step last">
+          <div class="num" data-n="3"></div>
+          <div class="step-body">
+            <h2>Press <b>Open</b> &mdash; you're in</h2>
+            <p class="hint above detail-typing">No button? Tap the code in the bot's message once (that copies it),
+              then paste it here. You can also type it &mdash; the dash doesn't matter.</p>
+            <form class="code-form" id="codeForm" autocomplete="off">
+              <input
+                id="code"
+                name="code"
+                inputmode="latin"
+                autocapitalize="characters"
+                spellcheck="false"
+                maxlength="9"
+                placeholder="ABCD-EFGH"
+                aria-label="Access code"
+              />
+              <button type="submit" id="codeGo">Open</button>
+            </form>
+            <p class="hint tiny">This phone or laptop then stays signed in for a week; after that it asks for the
+              same code again. One code works on two devices.</p>
+          </div>
+        </div>
+      </div>
+
+      <details id="howTo">
+        <summary>
+          <span class="ico">&#128214;</span>
+          <span class="label">After you're in: how to start a test
+            <small>Three taps from the home page</small></span>
+        </summary>
+        <div class="fold">
+          <ol>
+            <li><b>Tap a question bank</b> on the home page.</li>
+            <li><b>Open the folders</b> (they open like a list &mdash; subject, then tests) and <b>tap a test</b>.</li>
+            <li><b>Tap Start Test</b> and choose how you want it:
+              <div class="modes">
+                <div class="mode"><b>&#9889; Quiz Mode &mdash; for practice</b>
+                  <span>The right answer and explanation show as soon as you answer each question.</span></div>
+                <div class="mode"><b>&#9201;&#65039; Test Mode &mdash; like the real exam</b>
+                  <span>Timed. You see your score, answers and explanations at the end.</span></div>
+              </div>
+            </li>
+          </ol>
+          <p class="tip">&#128190; Your answers save by themselves. Close it any time &mdash; it waits for you under
+            <b>Continue where you left off</b> on the home page.<br />
+            &#127909; Videos and live classes: home page &rarr; <b>More</b> &rarr; <b>Live &amp; videos</b>.<br />
+            &#128218; A full guide (tests, codes, videos, leaderboard) opens right after you sign in, and stays
+            under <b>How to use</b> on the home page.</p>
+        </div>
+      </details>
+
+      <details id="trouble">
+        <summary>
+          <span class="ico">&#128161;</span>
+          <span class="label">Having trouble?
+            <small>The usual problems and what to do</small></span>
+        </summary>
+        <div class="fold">
+          <div class="qa"><span class="q">Asked for the code again after a week</span>
+            That's normal: each browser asks once a week. Type the <b>same code</b> again (scroll up in your chat
+            with the bot) &mdash; it works for 30 days. Please don't ask the bot for a new one: every new code signs
+            out your other devices.</div>
+          <div class="qa"><span class="q">&ldquo;That code isn't right&rdquo;</span>
+            Copy it from the bot instead of typing it (tap the code once), or tap the bot's
+            <b>Open the website</b> button. Only the newest code works.</div>
+          <div class="qa"><span class="q">&ldquo;Already signed in on two other devices&rdquo;</span>
+            One code works on two devices. Send <b>/code</b> to the bot for a new one &mdash; that signs the
+            old devices out.</div>
+          <div class="qa"><span class="q">It asks for the code every time I open it</span>
+            Telegram may open the site inside its own browser, which forgets you. Use your phone's own browser:
+            open <b>qb.neetpgbot.in</b> in <b>Safari</b> (iPhone) or <b>Chrome</b> (Android) and sign in there.
+            To get an icon: Chrome &rarr; &#8942; &rarr; <b>Add to Home screen</b>. On iPhone, Safari &rarr; Share
+            &rarr; <b>Add to Home Screen</b>, then open the new icon and sign in <b>inside it</b> (on iPhone the
+            icon counts as its own device). Each browser counts as one of your two devices.</div>
+          <div class="qa"><span class="q">&ldquo;Your access has ended&rdquo; or the code expired</span>
+            Codes last 30 days &mdash; send <b>/code</b> to the bot for a new one. If the bot says you're not
+            in the group, contact the owner below.</div>
+        </div>
+      </details>
+
+      <hr class="rule" />
+      <a class="owner" href="https://t.me/neet_pg_bot" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M21.9 4.3 18.7 19.4c-.2 1.1-.9 1.3-1.8.8l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.3-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.2 13 1.4 11.5c-1-.3-1-1 .2-1.5L20.5 2.9c.9-.3 1.6.2 1.4 1.4z"/></svg>
+        <span>Contact the owner &middot; @neet_pg_bot
+          <small>To join the group, or if something is wrong with your account.</small></span>
+      </a>
+    </main>
+
+    <script>
+      // Which page the visitor was heading for before the gate stopped them.
+      const params = new URLSearchParams(location.search);
+      // Only a page on this site: a path from the root, never "//other.site" or a full address.
+      const next = (() => {
+        const asked = params.get("next") || "";
+        return /^\/(?![\/\\])/.test(asked) && !asked.startsWith("/login.html") ? asked : "/";
+      })();
+      const msgBox = document.getElementById("msg");
+
+      const REASONS = {
+        not_member: "That account isn't in our group. Tap Contact the owner below to be added.",
+        access_expired: "Your access has ended. Tap Contact the owner below to continue.",
+        expired: "Each browser asks for your code once a week. Enter the same code again — it works for 30 days, no need for a new one.",
+        bad_signature: "Please enter your code again.",
+        malformed: "Please enter your code again.",
+        code_replaced: "A newer code was issued for you. Get the current one from the bot (step 1).",
+        too_many_attempts: "Too many attempts. Wait a few minutes and try again.",
+        not_configured: "The gate isn't set up yet — tell the admin.",
+        signed_out: "",
+        bad_code: "That code isn't right. Copy it from the bot's message (tap the code once) and try again.",
+        code_expired: "Codes last 30 days and this one has expired. Get a new one from the bot (step 1).",
+        code_in_use: "That code is already signed in on two other devices, the most one code allows. Get a new code from the bot (step 1) to use it here — that signs the other devices out.",
+        code_revoked: "That code was turned off by the owner. Tap Contact the owner below.",
+        agent_browser: "This browser can't open the site: it looks like one an app or an AI assistant controls. Open this page in Chrome, Safari, Edge or Firefox and enter your code there.",
+      };
+
+      const say = (text, kind) => {
+        msgBox.textContent = text;
+        msgBox.className = "msg show " + (kind || "info");
+      };
+
+      const reason = params.get("reason");
+      if (reason && REASONS[reason]) say(REASONS[reason], reason === "expired" ? "info" : "error");
+
+      // A stable-ish id for this browser, so one code can be limited to a few
+      // devices without anything identifying the person.
+      const deviceId = (() => {
+        try {
+          let id = localStorage.getItem("qb_device");
+          if (!id) {
+            id = (crypto.randomUUID && crypto.randomUUID()) || String(Math.random()).slice(2);
+            localStorage.setItem("qb_device", id);
+          }
+          return id;
+        } catch (err) {
+          return "";
+        }
+      })();
+
+      const post = async (url, payload, button) => {
+        if (button) button.disabled = true;
+        say("Checking…", "info");
+        try {
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => ({}));
+          if (res.ok) {
+            say("Welcome" + (data.name ? ", " + data.name : "") + " — opening…", "info");
+            // The first sign-in in this browser opens the guide (once); after that, where they were going.
+            let dest = next;
+            try {
+              if (next === "/" && !localStorage.getItem("guide_seen")) dest = "/guide?welcome=1";
+            } catch (err) {
+              /* no storage: straight to Home */
+            }
+            location.replace(dest);
+            return;
+          }
+          // The code didn't work: bring every step back, since step 1 is usually the fix.
+          document.body.classList.remove("has-code");
+          say(REASONS[data.error] || "That did not work. Please try again.", "error");
+        } catch (err) {
+          say("Could not reach the server. Check your connection and try again.", "error");
+        }
+        if (button) button.disabled = false;
+      };
+
+      // Signs of a browser an AI agent drives (23 Oct 2026; gate.py "AI-agent browsers", noted only unless the owner
+      // turns it on). Real taps / key presses on this page (a script that presses Open makes none), the desktop app's
+      // name in the User-Agent, a window with no outer size, a Chromium that names no browser — the same three as the
+      // app's device-signature.ts (keep them alike). Phones are left out of the last two (in-app browsers look odd).
+      let gestures = 0;
+      const countGesture = (event) => { if (event.isTrusted) gestures++; };
+      addEventListener("pointerdown", countGesture, true);
+      addEventListener("keydown", countGesture, true);
+      const agentSignals = () => {
+        const out = [];
+        try {
+          const app = /\b(Claude|Electron|Antigravity|Cursor|Windsurf|Kiro|Trae)\/\d/i.exec(navigator.userAgent);
+          if (app) out.push("app:" + app[1].toLowerCase());
+          const touch = matchMedia("(pointer: coarse)").matches || (navigator.maxTouchPoints || 0) > 0;
+          if (!touch && window.outerWidth === 0 && window.outerHeight === 0) out.push("no-window");
+          const brands = ((navigator.userAgentData && navigator.userAgentData.brands) || []).map((b) => b.brand);
+          const vendor = /Google Chrome|Microsoft Edge|Brave|Opera|Vivaldi|Yandex|Samsung|Android WebView|DuckDuckGo|Arc\b/i;
+          if (!touch && brands.some((b) => /Chromium/i.test(b)) && !brands.some((b) => vendor.test(b))) out.push("chromium-only");
+        } catch (err) {
+          /* nothing to report */
+        }
+        return out;
+      };
+
+      const codeForm = document.getElementById("codeForm");
+      const codeInput = document.getElementById("code");
+      const codeGo = document.getElementById("codeGo");
+      codeForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const code = codeInput.value.trim();
+        if (!code) return codeInput.focus();
+        post("/qbapi/code", { code, device: deviceId, hg: gestures, ag: agentSignals() }, codeGo);
+      });
+
+      // The bot's "Open the website" button carries the person's code along:
+      // /login.html#code=ABCD-EFGH. It rides in the fragment, not the query
+      // string, so it is never sent to the server and never lands in an access
+      // log. Read it, put it in the box, and stop there — the code is only ever
+      // spent when someone actually presses Open, so a link opened by accident
+      // (or by an app previewing it) can't sign a stranger's device in.
+      const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+      const tidyCode = (raw) => {
+        const clean = String(raw || "")
+          .toUpperCase()
+          .split("")
+          .filter((ch) => ALPHABET.indexOf(ch) >= 0)
+          .join("")
+          .slice(0, 8);
+        return clean.length === 8 ? clean.slice(0, 4) + "-" + clean.slice(4) : clean;
+      };
+
+      const takeHandedCode = () => {
+        try {
+          const fromHash = new URLSearchParams(location.hash.replace(/^#/, "")).get("code");
+          const fromQuery = new URLSearchParams(location.search).get("code");
+          return tidyCode(fromHash || fromQuery || "");
+        } catch (err) {
+          return "";
+        }
+      };
+
+      const fillHandedCode = (firstLoad) => {
+        const handed = takeHandedCode();
+        // No code handed over: ready for typing on a laptop, but don't scroll a phone
+        // past steps 1 and 2 (or pop its keyboard) before they've been read.
+        if (!handed) {
+          if (firstLoad && !matchMedia("(pointer: coarse)").matches) {
+            try { codeInput.focus({ preventScroll: true }); } catch (err) { /* fine unfocused */ }
+          }
+          return;
+        }
+        codeInput.value = handed;
+        // Steps 1 and 2 are done: fold them away and leave just the Open button in front.
+        document.body.classList.add("has-code");
+        // Don't leave it sitting in the address bar, in history, or in a
+        // screenshot of this page.
+        try {
+          const keep = new URLSearchParams(location.search);
+          keep.delete("code");
+          const rest = keep.toString();
+          history.replaceState(null, "", location.pathname + (rest ? "?" + rest : ""));
+        } catch (err) {
+          /* an older browser; the code is filled in either way */
+        }
+        if (!(firstLoad && reason && REASONS[reason])) {
+          say("Your code is filled in — just press the blue Open button.", "info");
+        }
+        // Focus the button, not the box: pressing Enter still works, and a phone
+        // doesn't pop its keyboard up for a field nobody needs to type in.
+        codeGo.focus();
+      };
+
+      fillHandedCode(true);
+      // Tapping a fresh code's link while this page is already open only changes
+      // the fragment, which no browser treats as a new page — so pick it up here
+      // too, or the box would keep showing the previous (now dead) code.
+      window.addEventListener("hashchange", () => fillHandedCode(false));
+
+    </script>
+  </body>
+</html>

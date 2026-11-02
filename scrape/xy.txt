@@ -1,0 +1,86 @@
+index-BIQSOdrK.js:11 
+ GET https://corebtr-assets-production.s3.ap-south-1.amazonaws.com/courses.json net::ERR_ABORTED 403 (Forbidden)
+
+index-BIQSOdrK.js:11 
+ GET https://corebtr-assets-production.s3.ap-south-1.amazonaws.com/manifest_neetpg.json net::ERR_ABORTED 403 (Forbidden)
+index-BIQSOdrK.js:11 
+ GET https://assets.corebtr.com/courses.json net::ERR_ABORTED 403 (Forbidden)
+index-BIQSOdrK.js:11 
+ GET https://assets.corebtr.com/manifest_neetpg.json net::ERR_ABORTED 403 (Forbidden)
+VM5707:68 
+(index)
+url
+status
+type
+0	'https://corebtr-assets-production.s3.ap-south-1.amazonaws.com/courses.json'	0	'opaque'
+1	'https://corebtr-assets-production.s3.ap-south-1.amazonaws.com/manifest_neetpg.json'	0	'opaque'
+2	'https://assets.corebtr.com/courses.json'	0	'opaque'
+3	'https://assets.corebtr.com/manifest_neetpg.json'	0	'opaque'
+Array(4)
+VM5707:20 [vault] persistent hook injected (blob: script). It will survive an F5.
+VM5707:137 --- LOADER: Ak (the vault read) ---
+VM5707:138 =async e=>{const t=$d(e),s=Va.get(t);if(s)return s;const r=(async()=>{const a=(await Dd()).b[t];if(!a){if(!/^(DAMS|medsynapse|PrepLadder)\//.test(t)||!t.endsWith(".json"))return{data:null,problem:"missing"};const x=await fetch(`/qbapi/extra-test?path=${encodeURIComponent(t)}`);if(x.status===401)return{data:null,problem:"signed_out"};if(x.ok){const g=await x.json();return g!=null&&g.ok&&g.test?{data:g.test,problem:null}:{data:null,problem:"missing"}}if(x.status===404||x.status===400)return{data:null,problem:"missing"};throw _l(x),new Error(`extra-test ${x.status}`)}const i=Rd(a.u),c=a.k?Promise.resolve(a.k):Tk(a.u),l=await fetch(i,{cache:"force-cache",headers:await Li(i)});if(!l.ok)throw _l(l),new Error(`blob ${l.status}`);const u=await c;if(!u)throw new Error(`no key for ${t}`);const h=await Xp(await l.arrayBuffer(),Sk(u)),m=await Jp(h),f=m.includes("assets.corebtr.com")?m.replaceAll("ht
+VM5707:139 --- LOADER: Dd (key/index source) ---
+VM5707:140 =()=>(Sa||(Sa=(async()=>{const e=Rd(jk),t=await fetch(e,{cache:"force-cache",headers:await Li(e)});if(!t.ok)throw new Error(`content store unavailable (${t.status})`);const s=await t.arrayBuffer(),r=await Xp(s,await Ck());return JSON.parse(await Jp(r))})().catch(e=>{throw Sa=null,e})),Sa),Ek=()=>{Zp(),Dd().catch(()=>{})},Va=new Map,$d=e=>e.replace(/^\/?data\//,"").replace(/^\//,"");let $f=0;const _l=e=>{if(e.status!==429&&e.status!==403||Date.now()-$f<6e4)return;if($f=Date.now(),e.status===403){Le.error("Opening new files is paused on this account for now. If you think that's a mistake, message @neet_pg_bot.",{duration:12e3});return}const t=Math.max(1,Math.ceil((Number(e.headers.get("Retry-After"))||600)/60)),s=t>=90?`about ${Math.round(t/60)} hours`:`about ${t} minute${t===1?"":"s"}`;Le.error(`You've opened a very large number of files in a short time, so new ones are paused for ${s}. E
+VM5707:141 --- LOADER: key var c ---
+VM5707:142 =(i==null?void 0:i.nonce)||(i==null?void 0:i.getAttribute("nonce"));o=Promise.allSettled(s.map(l=>{if(l=G0(l),l in af)return;af[l]=!0;const u=l.endsWith(".css"),h=u?'[rel="stylesheet"]':"";if(document.querySelector(`link[href="${l}"]${h}`))return;const m=document.createElement("link");if(m.rel=u?"stylesheet":U0,u||(m.as="script"),m.crossOrigin="",m.href=l,c&&m.setAttribute("nonce",c),document.head.appendChild(m),u)return new Promise((f,p)=>{m.addEventListener("load",f),m.addEventListener("error",()=>p(new Error(`Unable to preload CSS for ${l}`)))})}))}function a(i){const c=new Event("vite:preloadError",{cancelable:!0});if(c.payload=i,window.dispatchEvent(c),!c.defaultPrevented)throw i}return o.then(i=>{for(const c of i||[])c.status==="rejected"&&a(c.reason);return t().catch(a)})};var cf=["light","dark"],W0="(prefers-color-scheme: dark)",Y0=d.createContext(void 0),V0={setTheme:e=>{},theme
+VM5707:143 --- DOMAINS in bundle ---
+VM5707:144 PATH "/c/
+PATH "/qbapi/
+PATH "/qbapi/announcements
+PATH "/qbapi/code
+PATH "/qbapi/daily-test/manifest
+PATH "/qbapi/daily-test/mine
+PATH "/qbapi/daily-test/submit
+PATH "/qbapi/daily-test/top
+PATH "/qbapi/device/switch
+PATH "/qbapi/extra-tests
+PATH "/qbapi/leaderboard/me
+PATH "/qbapi/live
+PATH "/qbapi/live/s/
+PATH "/qbapi/live/v/
+PATH "/qbapi/logout
+PATH "/qbapi/me
+PATH "/qbapi/ping
+PATH "/qbapi/prep-live
+PATH "/qbapi/progress
+PATH "/qbapi/shared-folders
+PATH "/qbapi/shared-tests
+PATH "/qbapi/stamp
+PATH "/qbapi/sync
+PATH "/qbapi/videos
+PATH "/qbapi/videos/b/
+PATH "/qbapi/videos/m/
+PATH "/qbapi/videos/new
+PATH "/qbapi/videos/p/
+PATH "/qbapi/videos/s/
+PATH "/qbapi/videos/v/
+PATH `/data/${h}
+PATH `/data/${t}.json
+PATH `/data/${t}.manifest.json
+PATH `/qbapi/daily-test/leaderboard?track=${encodeURI
+PATH `/qbapi/daily-test/paper?track=${encodeURICompon
+PATH `/qbapi/extra-test?path=${encodeURIComponent(t)}
+PATH `/qbapi/key?u=${e}
+PATH `/qbapi/leaderboard?${s}
+PATH `/qbapi/shared-folders/${encodeURIComponent(e)}
+PATH `/qbapi/shared-tests/${encodeURIComponent(t)}
+aistudio.google.com
+api.anthropic.com
+api.deepseek.com
+api.groq.com
+api.mistral.ai
+api.openai.com
+assets.corebtr.com
+console.anthropic.com
+console.groq.com
+console.mistral.ai
+corebtr-assets-production.s3.ap-south-1.amazonaws.com
+generativelanguage.googleapis.com
+localhost
+openrouter.ai
+platform.deepseek.com
+platform.openai.com
+reactjs.org
+t.me
+www.w3.org
