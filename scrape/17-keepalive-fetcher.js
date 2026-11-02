@@ -1,7 +1,7 @@
 /* 17-keepalive-fetcher.js — keep session alive + background batch fetcher.
  *
  * Does two things:
- *   1. KEEP-ALIVE: pings /qbapi/ping every 30s + /qbapi/sync every 60s to
+ *   1. KEEP-ALIVE: pings /qbapi/me every 30s + /qbapi/sync every 60s to
  *      prevent inactivity-based session expiry (mimics normal app behavior).
  *   2. BATCH FETCHER: fetches question files from a configurable list with
  *      rate limiting + checkpoint/resume via localStorage.
@@ -104,7 +104,7 @@
   // ===== STEP 4: Start keep-alive =====
   log("Starting keep-alive (ping every 30s, sync every 60s)...");
   const keepAliveInterval = setInterval(async () => {
-    try { await fetch("/qbapi/ping", { credentials: "include", cache: "no-store" }); } catch (e) {}
+    try { await fetch("/qbapi/me", { credentials: "include", cache: "no-store" }); } catch (e) {}
   }, 30000);
   const syncInterval = setInterval(async () => {
     try { await fetch("/qbapi/sync", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ seq: 0 }) }); } catch (e) {}

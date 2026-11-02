@@ -162,7 +162,7 @@
   // ================= KEEP-ALIVE =================
   log("Starting keep-alive (30s pings)...");
   const kaInterval = setInterval(async () => {
-    try { await fetch("/qbapi/ping", { credentials: "include", cache: "no-store" }); } catch (e) {}
+    try { await fetch("/qbapi/me", { credentials: "include", cache: "no-store" }); } catch (e) {}
   }, 30000);
 
   // ================= 429 / ERROR HELPERS =================

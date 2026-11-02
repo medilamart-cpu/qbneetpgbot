@@ -92,7 +92,7 @@
   // ===== STEP 4: Keep-alive =====
   log("Starting keep-alive...");
   const kaInterval = setInterval(async () => {
-    try { await fetch("/qbapi/ping", { credentials: "include", cache: "no-store" }); } catch (e) {}
+    try { await fetch("/qbapi/me", { credentials: "include", cache: "no-store" }); } catch (e) {}
   }, 30000);
   const syncInterval = setInterval(async () => {
     try { await fetch("/qbapi/sync", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ seq: 0 }) }); } catch (e) {}

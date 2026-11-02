@@ -97,7 +97,7 @@
   // ===== Keep-alive =====
   log("Starting keep-alive...");
   const kaInterval = setInterval(async () => {
-    try { await fetch("/qbapi/ping", { credentials: "include", cache: "no-store" }); } catch (e) {}
+    try { await fetch("/qbapi/me", { credentials: "include", cache: "no-store" }); } catch (e) {}
   }, 30000);
 
   // ===== STAMP (X-SOS-Stamp header, now required by backend) =====
