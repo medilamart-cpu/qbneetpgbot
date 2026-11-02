@@ -43,7 +43,7 @@
   const BACKOFF_BASE_MS = 30000;        // 30s -> 60s -> 120s -> 240s
   const MAX_WAIT_MS = 15 * 60 * 1000;   // never wait longer than 15 min per 429
   const MAX_TRANSIENT_RETRIES = 3;      // network / 5xx retries per file
-  const SESSION_CHECK_EVERY = 25;       // files between /qbapi/me checks
+  const SESSION_CHECK_EVERY = 100;      // files between /qbapi/me checks (trimmed overhead)
   const PROGRESS_TABLE_EVERY = 50;      // files between progress tables
   const BANKS = ["AMBOSS", "Cerebellum", "Core_BTR", "DAMS", "DocTutorials", "Osmosis", "PrepLadder", "Reflex", "Speed", "eGurukul", "medsynapse"]; // Marrow excluded (already fetched)
   const BANK_ORDER = ["Core_BTR", "PrepLadder", "Cerebellum", "DAMS", "AMBOSS", "Speed", "eGurukul", "DocTutorials", "medsynapse", "Reflex", "Osmosis"];
@@ -73,12 +73,14 @@
     __stampCache24 = { key, day: t.day, offset: (t.now ? t.now * 1000 : Date.now()) - Date.now() };
     return __stampCache24;
   };
-  const stampHeaderFor24 = async (url) => {
+  const stampHeaderFor24 = async (url, _depth) => {
+    _depth = _depth || 0;
+    if (_depth > 2) throw new Error("stamp day mismatch loop");
     const s = await getStamp24();
     const n = Math.floor((Date.now() + s.offset) / 1000);
     if (s.day && new Date(n * 1000).toISOString().slice(0, 10) !== s.day) {
       __stampCache24 = null;
-      return stampHeaderFor24(url);
+      return stampHeaderFor24(url, _depth + 1);
     }
     const sig = new Uint8Array(await crypto.subtle.sign("HMAC", s.key, new TextEncoder().encode(n + "|" + url)));
     const hex = Array.from(sig.subarray(0, 16), (i) => i.toString(16).padStart(2, "0")).join("");
@@ -107,9 +109,23 @@
   if (sessionExpiry && sessionExpiry.getTime() < Date.now()) { err("SESSION EXPIRED."); return; }
   if (sessionExpiry) log("session window left:", ((sessionExpiry.getTime() - Date.now()) / 3600000).toFixed(1), "hours");
 
+  // ================= INDEXEDDB (opened early) =================
+  const DB_NAME = "qbFetchDB";
+  const STORE_NAME = "questions";
+  const db = await new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains(STORE_NAME)) d.createObjectStore(STORE_NAME, { keyPath: "path" });
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+
   // ================= LINKS =================
   if (!window.qbLinks || !window.qbLinks.data || !window.qbLinks.data.entries) {
     err("No links in memory. Run 14-links-reuse.js first.");
+    setupHelpers(db, STORE_NAME);
     return;
   }
   let allLinks = window.qbLinks.data.entries;
@@ -125,19 +141,6 @@
   for (const e of allLinks) { const b = e.path.split("/")[0]; bankCounts[b] = (bankCounts[b] || 0) + 1; }
   console.table(bankCounts);
 
-  // ================= INDEXEDDB =================
-  const DB_NAME = "qbFetchDB";
-  const STORE_NAME = "questions";
-  const db = await new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1);
-    req.onupgradeneeded = (e) => {
-      const d = e.target.result;
-      if (!d.objectStoreNames.contains(STORE_NAME)) d.createObjectStore(STORE_NAME, { keyPath: "path" });
-    };
-    req.onsuccess = (e) => resolve(e.target.result);
-    req.onerror = (e) => reject(e.target.error);
-  });
-
   const idb = (mode, fn) => new Promise((resolve, reject) => {
     const tx = db.transaction(STORE_NAME, mode);
     const store = tx.objectStore(STORE_NAME);
@@ -147,6 +150,18 @@
   });
   const countStored = () => idb("readonly", (s) => s.count()).catch(() => 0);
   const getStoredPaths = () => idb("readonly", (s) => s.getAllKeys()).catch(() => []);
+
+  window.__qb = {
+    getStamp24, stampHeaderFor24, db, STORE_NAME, countStored, getStoredPaths,
+    probe: async () => {
+      const e = (window.qbLinks && window.qbLinks.data && window.qbLinks.data.entries && window.qbLinks.data.entries[0]) || null;
+      if (!e) { console.log("no links loaded"); return; }
+      const h = await stampHeaderFor24(e.blobUrl);
+      const r = await fetch(e.blobUrl, { credentials: "include", headers: h });
+      console.log("probe status", r.status, r.type);
+      for (const [k, v] of r.headers) console.log("  ", k, "=", v);
+    }
+  };
   const idbGet = (path) => idb("readonly", (s) => s.get(path));
 
   const alreadyStored = await countStored();
@@ -302,7 +317,7 @@
   log("Starting keep-alive (30s pings)...");
   const kaInterval = setInterval(async () => {
     try { await fetch("/qbapi/me", { credentials: "include", cache: "no-store" }); } catch (e) {}
-  }, 30000);
+  }, 300000);  // 5 min (trimmed overhead)
 
   // ================= 429 / ERROR HELPERS =================
   const calc429Wait = (res, attempt) => {
@@ -328,7 +343,7 @@
   // ================= FETCH ONE FILE =================
   // returns: {status:"ok", data} | "skip" | "stop-403" | "stop-429" | "stop-session" | "stop-user"
   const fetchOne = async (entry) => {
-    let transient = 0;
+    let netTransient = 0, decTransient = 0;
     for (let a = 1; a <= 20; a++) {
       if (window.__qbStopRequested) return "stop-user";
 
@@ -337,10 +352,10 @@
       try {
         kr = await fetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor24("/c/" + entry.keyId.slice(0, 2) + "/" + entry.keyId.slice(2)) });
       } catch (e) {
-        transient++;
-        if (transient > MAX_TRANSIENT_RETRIES) { err("network fail x" + transient + " on key, skipping " + entry.path); return "skip"; }
-        warn("network error on key (try " + transient + "):", String(e).slice(0, 60));
-        await sleep(10000 * transient);
+        netTransient++;
+        if (netTransient > MAX_TRANSIENT_RETRIES) { err("network fail x" + netTransient + " on key, skipping " + entry.path); return "skip"; }
+        warn("network error on key (try " + netTransient + "):", String(e).slice(0, 60));
+        await sleep(10000 * netTransient);
         continue;
       }
       if (kr.status === 403) return "stop-403";
@@ -356,9 +371,9 @@
       }
       if (!kr.ok) {
         if (kr.status >= 500) {
-          transient++;
-          if (transient > MAX_TRANSIENT_RETRIES) { err("server error x" + kr.status + " on key, skipping"); return "skip"; }
-          await sleep(10000 * transient);
+          netTransient++;
+          if (netTransient > MAX_TRANSIENT_RETRIES) { err("server error x" + kr.status + " on key, skipping"); return "skip"; }
+          await sleep(10000 * netTransient);
           continue;
         }
         err("key HTTP " + kr.status + " for " + entry.path);
@@ -366,17 +381,17 @@
         return "skip";
       }
       let kd;
-      try { kd = await kr.json(); } catch (e) { transient++; if (transient > MAX_TRANSIENT_RETRIES) return "skip"; await sleep(5000); continue; }
+      try { kd = await kr.json(); } catch (e) { netTransient++; if (netTransient > MAX_TRANSIENT_RETRIES) return "skip"; await sleep(5000); continue; }
 
       // --- blob request ---
       let br;
       try {
         br = await fetch(entry.blobUrl, { credentials: "include", cache: "force-cache", headers: await stampHeaderFor24(entry.blobUrl) });
       } catch (e) {
-        transient++;
-        if (transient > MAX_TRANSIENT_RETRIES) { err("network fail on blob, skipping " + entry.path); return "skip"; }
-        warn("network error on blob (try " + transient + "):", String(e).slice(0, 60));
-        await sleep(10000 * transient);
+        netTransient++;
+        if (netTransient > MAX_TRANSIENT_RETRIES) { err("network fail on blob, skipping " + entry.path); return "skip"; }
+        warn("network error on blob (try " + netTransient + "):", String(e).slice(0, 60));
+        await sleep(10000 * netTransient);
         continue;
       }
       if (br.status === 403) return "stop-403";
@@ -392,9 +407,9 @@
       }
       if (!br.ok) {
         if (br.status >= 500) {
-          transient++;
-          if (transient > MAX_TRANSIENT_RETRIES) { err("server error on blob, skipping"); return "skip"; }
-          await sleep(10000 * transient);
+          netTransient++;
+          if (netTransient > MAX_TRANSIENT_RETRIES) { err("server error on blob, skipping"); return "skip"; }
+          await sleep(10000 * netTransient);
           continue;
         }
         err("blob HTTP " + br.status + " for " + entry.path);
@@ -421,13 +436,13 @@
         bursts429 = 0; // success resets the 429 burst counter
         return { status: "ok", data: data };
       } catch (e) {
-        transient++;
-        if (transient > MAX_TRANSIENT_RETRIES) {
+        decTransient++;
+        if (decTransient > MAX_TRANSIENT_RETRIES) {
           err("decrypt/store failed, skipping " + entry.path + ":", String(e).slice(0, 80));
           bankStats[entry.path.split("/")[0]].errors++;
           return "skip";
         }
-        await sleep(5000 * transient);
+        await sleep(5000 * decTransient);
         continue;
       }
     }
