@@ -100,6 +100,29 @@
     try { await fetch("/qbapi/ping", { credentials: "include", cache: "no-store" }); } catch (e) {}
   }, 30000);
 
+  // ===== STAMP (X-SOS-Stamp header, now required by backend) =====
+  let __stampCache21 = null;
+  const getStamp21 = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (__stampCache21 && __stampCache21.day === today) return __stampCache21;
+    const r = await fetch("/qbapi/stamp", { credentials: "include", cache: "no-store" });
+    const t = await r.json();
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(t.k), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    __stampCache21 = { key, day: t.day, offset: (t.now ? t.now * 1000 : Date.now()) - Date.now() };
+    return __stampCache21;
+  };
+  const stampHeaderFor21 = async (url) => {
+    const s = await getStamp21();
+    const n = Math.floor((Date.now() + s.offset) / 1000);
+    if (s.day && new Date(n * 1000).toISOString().slice(0, 10) !== s.day) {
+      __stampCache21 = null;
+      return stampHeaderFor21(url);
+    }
+    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", s.key, new TextEncoder().encode(n + "|" + url)));
+    const hex = Array.from(sig.subarray(0, 16), (i) => i.toString(16).padStart(2, "0")).join("");
+    return { "X-SOS-Stamp": n + "." + hex };
+  };
+
   // ===== Fetch loop =====
   let fetched = 0, errors = 0, rateLimited = false;
   const t0 = Date.now();
@@ -116,7 +139,7 @@
     }
 
     try {
-      const kr = await fetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store" });
+      const kr = await fetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor21("/c/" + entry.keyId.slice(0, 2) + "/" + entry.keyId.slice(2)) });
       if (kr.status === 429 || kr.status === 403) {
         const retryAfter = kr.headers.get("Retry-After");
         err("RATE LIMITED (" + kr.status + ") on " + entry.path);
@@ -127,7 +150,7 @@
       if (!kr.ok) { err("key fetch " + kr.status + " for " + entry.path); errors++; continue; }
       const kd = await kr.json();
 
-      const br = await fetch(entry.blobUrl, { credentials: "include", cache: "force-cache" });
+      const br = await fetch(entry.blobUrl, { credentials: "include", cache: "force-cache", headers: await stampHeaderFor21(entry.blobUrl) });
       if (br.status === 429 || br.status === 403) {
         err("RATE LIMITED (" + br.status + ") on blob " + entry.path);
         rateLimited = true;

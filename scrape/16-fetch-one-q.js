@@ -15,6 +15,26 @@
   const log = (...a) => console.log("%c[Q]", "color:#09f;font-weight:bold", ...a);
   const err = (...a) => console.log("%c[Q]", "color:#f33;font-weight:bold", ...a);
 
+  // stamp helper (X-SOS-Stamp now required)
+  let __stamp16 = null;
+  const getStamp16 = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (__stamp16 && __stamp16.day === today) return __stamp16;
+    const r = await fetch("/qbapi/stamp", { credentials: "include", cache: "no-store" });
+    const t = await r.json();
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(t.k), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    __stamp16 = { key, day: t.day, offset: (t.now ? t.now * 1000 : Date.now()) - Date.now() };
+    return __stamp16;
+  };
+  const stampHeaderFor16 = async (url) => {
+    const s = await getStamp16();
+    const n = Math.floor((Date.now() + s.offset) / 1000);
+    if (s.day && new Date(n * 1000).toISOString().slice(0, 10) !== s.day) { __stamp16 = null; return stampHeaderFor16(url); }
+    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", s.key, new TextEncoder().encode(n + "|" + url)));
+    const hex = Array.from(sig.subarray(0, 16), (i) => i.toString(16).padStart(2, "0")).join("");
+    return { "X-SOS-Stamp": n + "." + hex };
+  };
+
   // Use entry #1 from links.csv
   const keyId = "e4bd887f5450472c9d016f64dd6c7abb0d22f95e";
   const blobUrl = "/c/e4/bd887f5450472c9d016f64dd6c7abb0d22f95e";
@@ -24,7 +44,7 @@
   // 1. get the key
   let keyHex;
   try {
-    const kr = await fetch("/qbapi/key?u=" + keyId, { credentials: "include", cache: "no-store" });
+    const kr = await fetch("/qbapi/key?u=" + keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor16("/c/" + keyId.slice(0, 2) + "/" + keyId.slice(2)) });
     if (!kr.ok) { err("key fetch failed:", kr.status); return; }
     const kd = await kr.json();
     keyHex = kd.k;
@@ -35,7 +55,7 @@
   log("fetching blob", blobUrl);
   let buf;
   try {
-    const br = await fetch(blobUrl, { credentials: "include", cache: "force-cache" });
+    const br = await fetch(blobUrl, { credentials: "include", cache: "force-cache", headers: await stampHeaderFor16(blobUrl) });
     if (!br.ok) { err("blob fetch failed:", br.status); return; }
     buf = await br.arrayBuffer();
     log("blob bytes:", buf.byteLength);

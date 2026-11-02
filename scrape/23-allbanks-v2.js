@@ -44,6 +44,29 @@
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const rnd = (min, max) => min + Math.random() * (max - min);
+
+  // ================= STAMP (X-SOS-Stamp header, now required by the backend) =================
+  let __stampCache23 = null;
+  const getStamp23 = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (__stampCache23 && __stampCache23.day === today) return __stampCache23;
+    const r = await fetch("/qbapi/stamp", { credentials: "include", cache: "no-store" });
+    const t = await r.json();
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(t.k), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    __stampCache23 = { key, day: t.day, offset: (t.now ? t.now * 1000 : Date.now()) - Date.now() };
+    return __stampCache23;
+  };
+  const stampHeaderFor23 = async (url) => {
+    const s = await getStamp23();
+    const n = Math.floor((Date.now() + s.offset) / 1000);
+    if (s.day && new Date(n * 1000).toISOString().slice(0, 10) !== s.day) {
+      __stampCache23 = null;
+      return stampHeaderFor23(url);
+    }
+    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", s.key, new TextEncoder().encode(n + "|" + url)));
+    const hex = Array.from(sig.subarray(0, 16), (i) => i.toString(16).padStart(2, "0")).join("");
+    return { "X-SOS-Stamp": n + "." + hex };
+  };
   window.__qbStopRequested = false;
   window.qbStop = () => {
     window.__qbStopRequested = true;
@@ -177,7 +200,7 @@
       // --- key request ---
       let kr;
       try {
-        kr = await fetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store" });
+        kr = await fetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor23("/c/" + entry.keyId.slice(0, 2) + "/" + entry.keyId.slice(2)) });
       } catch (e) {
         transient++;
         if (transient > MAX_TRANSIENT_RETRIES) { err("network fail x" + transient + " on key, skipping " + entry.path); return "skip"; }
@@ -212,7 +235,7 @@
       // --- blob request ---
       let br;
       try {
-        br = await fetch(entry.blobUrl, { credentials: "include", cache: "force-cache" });
+        br = await fetch(entry.blobUrl, { credentials: "include", cache: "force-cache", headers: await stampHeaderFor23(entry.blobUrl) });
       } catch (e) {
         transient++;
         if (transient > MAX_TRANSIENT_RETRIES) { err("network fail on blob, skipping " + entry.path); return "skip"; }

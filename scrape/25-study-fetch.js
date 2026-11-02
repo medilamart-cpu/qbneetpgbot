@@ -37,6 +37,29 @@
   const sessionSaved = [];
   const keyCache = new Map();
   let captureOn = false;
+
+  // stamp (X-SOS-Stamp header, now required by backend)
+  let __stampCache25 = null;
+  const getStamp25 = async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    if (__stampCache25 && __stampCache25.day === today) return __stampCache25;
+    const r = await origFetch("/qbapi/stamp", { credentials: "include", cache: "no-store" });
+    const t = await r.json();
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(t.k), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    __stampCache25 = { key, day: t.day, offset: (t.now ? t.now * 1000 : Date.now()) - Date.now() };
+    return __stampCache25;
+  };
+  const stampHeaderFor25 = async (url) => {
+    const s = await getStamp25();
+    const n = Math.floor((Date.now() + s.offset) / 1000);
+    if (s.day && new Date(n * 1000).toISOString().slice(0, 10) !== s.day) {
+      __stampCache25 = null;
+      return stampHeaderFor25(url);
+    }
+    const sig = new Uint8Array(await crypto.subtle.sign("HMAC", s.key, new TextEncoder().encode(n + "|" + url)));
+    const hex = Array.from(sig.subarray(0, 16), (i) => i.toString(16).padStart(2, "0")).join("");
+    return { "X-SOS-Stamp": n + "." + hex };
+  };
   let lastKey = { id: null, at: 0 };
 
   // ================= IndexedDB (same store as other scripts) =================
@@ -142,7 +165,7 @@
       }
       let k = keyCache.get(keyId);
       if (!k) {
-        const kr = await origFetch("/qbapi/key?u=" + keyId, { credentials: "include", cache: "no-store" });
+        const kr = await origFetch("/qbapi/key?u=" + keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor25("/c/" + keyId.slice(0, 2) + "/" + keyId.slice(2)) });
         if (kr.status === 403) { err("account paused (403) — nothing can be opened until @neet_pg_bot lifts it."); return; }
         if (!kr.ok) { warn("key HTTP " + kr.status); return; }
         k = (await kr.json()).k;
@@ -263,14 +286,14 @@
       }
       log("fetching:", entry.path, "...");
       try {
-        const kr = await origFetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store" });
+        const kr = await origFetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor25("/c/" + entry.keyId.slice(0, 2) + "/" + entry.keyId.slice(2)) });
         if (kr.status === 403) { err("account paused (403) — nothing can be opened until @neet_pg_bot lifts it."); return null; }
         if (kr.status === 429) { err("rate limited (429) — wait a few minutes, try again."); return null; }
         if (!kr.ok) { err("key HTTP " + kr.status); return null; }
         const k = (await kr.json()).k;
         keyCache.set(entry.keyId, k);
 
-        const br = await origFetch(entry.blobUrl, { credentials: "include", cache: "force-cache" });
+        const br = await origFetch(entry.blobUrl, { credentials: "include", cache: "force-cache", headers: await stampHeaderFor25(entry.blobUrl) });
         if (br.status === 403) { err("account paused (403) on blob."); return null; }
         if (br.status === 429) { err("rate limited (429) on blob."); return null; }
         if (!br.ok) { err("blob HTTP " + br.status); return null; }
