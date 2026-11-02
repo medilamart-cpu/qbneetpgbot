@@ -18,7 +18,18 @@
 
   // ---------- 1) grab the bundle ----------
   let bundle = "";
-  for (const p of ["/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js"]) {
+  // Bundle filename carries a content hash that changes per build, so discover it
+  // from the live page instead of hardcoding a stale name.
+  const discoverBundleUrl = () => {
+    try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src; } catch (e) {}
+    try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name; } catch (e) {}
+    return null;
+  };
+  const bundleCandidates = [];
+  const discoveredBundle = discoverBundleUrl();
+  if (discoveredBundle) { bundleCandidates.push(discoveredBundle); log("discovered bundle:", discoveredBundle); }
+  bundleCandidates.push("/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js");
+  for (const p of bundleCandidates) {
     try { const r = await fetch(p, { credentials: "include" }); if (r.ok) { bundle = await r.text(); break; } } catch (e) {}
   }
   if (!bundle) { err("could not load bundle"); return; }

@@ -46,7 +46,12 @@
   }
 
   // ---------- 2) grab the bundles ----------
-  const bundleNames = ["index-BIQSOdrK.js", "ui-C03EVDcF.js"];
+  const discoveredIndexBundle = (() => {
+    try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src.split("/").pop(); } catch (e) {}
+    try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name.split("/").pop(); } catch (e) {}
+    return "index-BIQSOdrK.js";
+  })();
+  const bundleNames = [discoveredIndexBundle, "ui-C03EVDcF.js"];
   const texts = {};
   for (const n of bundleNames) {
     try {

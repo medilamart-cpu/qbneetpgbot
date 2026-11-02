@@ -22,7 +22,12 @@
   let all = window.__qbBundleText;
   if (!all) {
     log("no saved bundle — refetching index bundle");
-    try { const r = await fetch("/assets/index-BIQSOdrK.js", { credentials: "include" }); all = await r.text(); } catch (e) { all = ""; }
+    const discoverBundleUrl6 = () => {
+      try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src; } catch (e) {}
+      try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name; } catch (e) {}
+      return "/assets/index-BIQSOdrK.js";
+    };
+    try { const r = await fetch(discoverBundleUrl6(), { credentials: "include" }); all = await r.text(); } catch (e) { all = ""; }
     window.__qbBundleText = all;
   }
   log("bundle length:", all.length);

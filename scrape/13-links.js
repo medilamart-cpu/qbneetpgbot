@@ -17,7 +17,16 @@
   let srcs = window.__qbExtracted;
   if (!srcs || !srcs.wk) {
     let bundle = "";
-    for (const p of ["/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js"]) {
+    const discoverBundleUrl13 = () => {
+      try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src; } catch (e) {}
+      try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name; } catch (e) {}
+      return null;
+    };
+    const bundleCandidates13 = [];
+    const discovered13 = discoverBundleUrl13();
+    if (discovered13) bundleCandidates13.push(discovered13);
+    bundleCandidates13.push("/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js");
+    for (const p of bundleCandidates13) {
       try { const r = await fetch(p, { credentials: "include" }); if (r.ok) { bundle = await r.text(); break; } } catch (e) {}
     }
     if (!bundle) { err("no bundle"); return; }

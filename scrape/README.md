@@ -42,7 +42,7 @@ superseded by `full-library.json`.
 
 The complete library is NOT in `/new-tests.json` (that's a 30-day snapshot).
 It lives behind an encrypted "vault". Reverse-engineering the app bundle
-(`index-BIQSOdrK.js`) showed the loader:
+(the app's hashed `index-*.js` bundle) showed the loader:
 
 ```js
 xt = async e => (await Ak(e)).data          // read a vault file by path

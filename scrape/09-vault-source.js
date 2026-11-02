@@ -79,7 +79,16 @@
 
   // ===================== PART B — VAULT LOADER SOURCE =====================
   let bundle = "";
-  for (const p of ["/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js"]) {
+  const discoverBundleUrl9 = () => {
+    try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src; } catch (e) {}
+    try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name; } catch (e) {}
+    return null;
+  };
+  const bundleCandidates9 = [];
+  const discovered9 = discoverBundleUrl9();
+  if (discovered9) bundleCandidates9.push(discovered9);
+  bundleCandidates9.push("/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js");
+  for (const p of bundleCandidates9) {
     try { const r = await fetch(p, { credentials: "include" }); if (r.ok) { bundle = await r.text(); break; } } catch (e) {}
   }
   log("bundle length:", bundle.length);

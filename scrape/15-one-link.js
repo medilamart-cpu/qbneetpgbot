@@ -14,7 +14,16 @@
   const err = (...a) => console.log("%c[ONE]", "color:#f33;font-weight:bold", ...a);
 
   let bundle = "";
-  for (const p of ["/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js"]) {
+  const discoverBundleUrl15 = () => {
+    try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src; } catch (e) {}
+    try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name; } catch (e) {}
+    return null;
+  };
+  const bundleCandidates15 = [];
+  const discovered15 = discoverBundleUrl15();
+  if (discovered15) bundleCandidates15.push(discovered15);
+  bundleCandidates15.push("/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js");
+  for (const p of bundleCandidates15) {
     try { const r = await fetch(p, { credentials: "include" }); if (r.ok) { bundle = await r.text(); break; } } catch (e) {}
   }
   if (!bundle) { err("no bundle"); return; }

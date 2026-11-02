@@ -12,15 +12,26 @@
   const err = (...a) => console.log("%c[LINKS]", "color:#f33;font-weight:bold", ...a);
 
   let bundle = "";
-  for (const p of ["/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js"]) {
+  const discoverBundleUrl14 = () => {
+    try { const s = document.querySelector('script[src*="index-"][src$=".js"]'); if (s && s.src) return s.src; } catch (e) {}
+    try { const e = performance.getEntriesByType("resource").find((x) => /\/assets\/index-[A-Za-z0-9_-]+\.js/.test(x.name)); if (e) return e.name; } catch (e) {}
+    return null;
+  };
+  const bundleCandidates14 = [];
+  const discovered14 = discoverBundleUrl14();
+  if (discovered14) { bundleCandidates14.push(discovered14); log("discovered bundle:", discovered14); }
+  bundleCandidates14.push("/assets/index-BIQSOdrK.js", "/index-BIQSOdrK.js", "index-BIQSOdrK.js");
+  for (const p of bundleCandidates14) {
     try { const r = await fetch(p, { credentials: "include" }); if (r.ok) { bundle = await r.text(); break; } } catch (e) {}
   }
   if (!bundle) { err("no bundle"); return; }
 
   const matchDelims = (str, start) => { const open = str[start]; const close = open === "{" ? "}" : open === "[" ? "]" : ")"; let depth = 0, i = start, inStr = null; while (i < str.length) { const c = str[i]; if (inStr) { if (c === "\\") { i += 2; continue; } if (c === inStr) inStr = null; i++; continue; } if (c === '"' || c === "'" || c === "`") { inStr = c; i++; continue; } if (c === open) depth++; else if (c === close) { depth--; if (depth === 0) return i + 1; } i++; } return -1; };
   const extractAssign = (sym) => { const re = new RegExp("(?:^|[^A-Za-z0-9_$])" + sym.replace(/\$/g, "\\$") + "="); const m = re.exec(bundle); if (!m) return null; const idx = m.index + m[0].length - sym.length - 1; let i = idx + sym.length + 1; while (bundle[i] === " ") i++; if (bundle.startsWith("async", i)) { i += 5; while (bundle[i] === " ") i++; } if (bundle.startsWith("function", i)) { const b = bundle.indexOf("{", i); return bundle.slice(idx, matchDelims(bundle, b)); } const arrow = bundle.indexOf("=>", i); if (arrow > -1 && arrow - i < 30) { let j = arrow + 2; while (bundle[j] === " ") j++; if (bundle[j] === "{") return bundle.slice(idx, matchDelims(bundle, j)); let k = j, depth = 0, inStr = null; while (k < bundle.length) { const c = bundle[k]; if (inStr) { if (c === "\\") { k += 2; continue; } if (c === inStr) inStr = null; k++; continue; } if (c === '"' || c === "'" || c === "`") { inStr = c; k++; continue; } if ("([{".includes(c)) depth++; else if (")]}".includes(c)) depth--; else if ((c === "," || c === ";") && depth <= 0) break; k++; } return bundle.slice(idx, k); } const c = bundle[i]; if (c === "{" || c === "[" || c === "(") return bundle.slice(idx, matchDelims(bundle, i)); if (c === '"' || c === "'" || c === "`") { let k = i + 1; while (k < bundle.length) { const ch = bundle[k]; if (ch === "\\") { k += 2; continue; } if (ch === c) break; k++; } return bundle.slice(idx, k + 1); } let k = i; while (k < bundle.length && !",;\n}".includes(bundle[k])) k++; return bundle.slice(idx, k); };
-  const srcs = {}; for (const s of ["wk", "Rf", "vk", "Zp", "Li", "Ck"]) srcs[s] = extractAssign(s);
-  if (!srcs.wk) { err("extraction failed"); return; }
+  const requiredSyms = ["wk", "Rf", "vk", "Zp", "Li", "Ck"];
+  const srcs = {}; for (const s of requiredSyms) srcs[s] = extractAssign(s);
+  const missingSyms = requiredSyms.filter((s) => !srcs[s]);
+  if (missingSyms.length) { err("missing symbols:", missingSyms.join(", ")); err("the bundle's minified names may have changed; inspect window.__qbBundleText"); return; }
 
   // Wrap EVERYTHING in an async IIFE so `wr` is local
   const inner = [
