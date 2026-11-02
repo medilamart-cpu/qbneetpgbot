@@ -34,11 +34,11 @@
   const warn = (...a) => console.log("%c[V2+]", "color:#fa0;font-weight:bold", ...a);
 
   // ================= FETCH CONFIG =================
-  const DELAY_MIN_MS = 5000;            // random gap floor (5s)
-  const DELAY_MAX_MS = 15000;           // random gap ceiling (15s)
-  const LONG_PAUSE_CHANCE = 0.05;       // 5% chance of a long break
-  const LONG_PAUSE_MIN_MS = 30000;      // 30s
-  const LONG_PAUSE_MAX_MS = 60000;      // 60s
+  const DELAY_MIN_MS = 15000;           // random gap floor (15s)
+  const DELAY_MAX_MS = 45000;           // random gap ceiling (45s)
+  const LONG_PAUSE_CHANCE = 0.10;       // 10% chance of a long break
+  const LONG_PAUSE_MIN_MS = 60000;      // 60s
+  const LONG_PAUSE_MAX_MS = 180000;     // 3 min
   const MAX_429_WAITS = 5;              // max consecutive rate-limit waits per burst
   const BACKOFF_BASE_MS = 30000;        // 30s -> 60s -> 120s -> 240s
   const MAX_WAIT_MS = 15 * 60 * 1000;   // never wait longer than 15 min per 429
