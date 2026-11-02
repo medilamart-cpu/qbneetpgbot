@@ -82,7 +82,7 @@
     return bundle.slice(idx, k);
   };
 
-  const requiredSyms = ["Lk", "Fk", "xi", "mg", "Yk"];
+  const requiredSyms = ["Lk", "Fk", "Gf", "xi", "mg", "Yk"];
   const optionalSyms = ["Rf"];
   const srcs = {};
   for (const s of requiredSyms) srcs[s] = extractAssign(s);
@@ -157,7 +157,7 @@
   ].join("\n");
 
   // join with newlines so each helper is on its own line (cleaner parse)
-  const blobSrc = "(async function() {\n" + ['let wr = null;', srcs.Lk, srcs.Fk, srcs.xi, srcs.mg, srcs.Yk, 'var wk=Lk, vk=Fk, Zp=xi, Li=mg, Ck=Yk;', 'var jk="5b908a4bbef284d44ab65836eee87cb5375976b1";', 'var kk="/c";', 'function Rd(e){return kk+"/"+e.slice(0,2)+"/"+e.slice(2);}', 'async function Xp(e,t){var s=new Uint8Array(e),r=s.subarray(0,12),o=s.subarray(12);var a=await crypto.subtle.importKey("raw",t,"AES-GCM",false,["decrypt"]);return new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:r,tagLength:128},a,o));}', 'async function Jp(e){return new Response(new Blob([e]).stream().pipeThrough(new DecompressionStream("gzip"))).text();}', 'try {', '  var url=Rd(jk);', '  var headers={}; try{ headers=await Li(url); }catch(e){}', '  var resp=await fetch(url,{cache:"force-cache",headers:headers||{}});', '  if(!resp.ok){ window.__qbLibError="fetch "+resp.status; window.__qbLibDone=true; return; }', '  var buf=await resp.arrayBuffer();', '  var key=await Ck();', '  var plain=await Xp(buf,key);', '  var text=await Jp(plain);', '  var manifest=JSON.parse(text);', '  window.__qbLibRaw=manifest&&manifest.b; window.__qbLibDone=true;', '}catch(e){ window.__qbLibError=String(e); window.__qbLibDone=true; }'].join("\n") + "\n})();";
+  const blobSrc = "(async function() {\n" + ['let wr = null;', srcs.Gf, srcs.Lk, srcs.Fk, srcs.xi, srcs.mg, srcs.Yk, 'var wk=Lk, vk=Fk, Zp=xi, Li=mg, Ck=Yk;', 'var jk="5b908a4bbef284d44ab65836eee87cb5375976b1";', 'var kk="/c";', 'function Rd(e){return kk+"/"+e.slice(0,2)+"/"+e.slice(2);}', 'async function Xp(e,t){var s=new Uint8Array(e),r=s.subarray(0,12),o=s.subarray(12);var a=await crypto.subtle.importKey("raw",t,"AES-GCM",false,["decrypt"]);return new Uint8Array(await crypto.subtle.decrypt({name:"AES-GCM",iv:r,tagLength:128},a,o));}', 'async function Jp(e){return new Response(new Blob([e]).stream().pipeThrough(new DecompressionStream("gzip"))).text();}', 'try {', '  var url=Rd(jk);', '  var headers={}; try{ headers=await Li(url); }catch(e){}', '  var resp=await fetch(url,{cache:"force-cache",headers:headers||{}});', '  if(!resp.ok){ window.__qbLibError="fetch "+resp.status; window.__qbLibDone=true; return; }', '  var buf=await resp.arrayBuffer();', '  var key=await Ck();', '  var plain=await Xp(buf,key);', '  var text=await Jp(plain);', '  var manifest=JSON.parse(text);', '  window.__qbLibRaw=manifest&&manifest.b; window.__qbLibDone=true;', '}catch(e){ window.__qbLibError=String(e); window.__qbLibDone=true; }'].join("\n") + "\n})();";
   window.__qbBlobSrc = blobSrc;
 
   window.__qbLibDone = false;

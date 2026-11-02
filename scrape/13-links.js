@@ -32,7 +32,7 @@
     if (!bundle) { err("no bundle"); return; }
     const matchDelims = (str, start) => { const open = str[start]; const close = open === "{" ? "}" : open === "[" ? "]" : ")"; let depth = 0, i = start, inStr = null; while (i < str.length) { const c = str[i]; if (inStr) { if (c === "\\") { i += 2; continue; } if (c === inStr) inStr = null; i++; continue; } if (c === '"' || c === "'" || c === "`") { inStr = c; i++; continue; } if (c === open) depth++; else if (c === close) { depth--; if (depth === 0) return i + 1; } i++; } return -1; };
     const extractAssign = (sym) => { const re = new RegExp("(?:^|[^A-Za-z0-9_$])" + sym.replace(/\$/g, "\\$") + "="); const m = re.exec(bundle); if (!m) return null; const idx = m.index + m[0].length - sym.length - 1; let i = idx + sym.length + 1; while (bundle[i] === " ") i++; if (bundle.startsWith("async", i)) { i += 5; while (bundle[i] === " ") i++; } if (bundle.startsWith("function", i)) { const b = bundle.indexOf("{", i); return bundle.slice(idx, matchDelims(bundle, b)); } const arrow = bundle.indexOf("=>", i); if (arrow > -1 && arrow - i < 30) { let j = arrow + 2; while (bundle[j] === " ") j++; if (bundle[j] === "{") return bundle.slice(idx, matchDelims(bundle, j)); let k = j, depth = 0, inStr = null; while (k < bundle.length) { const c = bundle[k]; if (inStr) { if (c === "\\") { k += 2; continue; } if (c === inStr) inStr = null; k++; continue; } if (c === '"' || c === "'" || c === "`") { inStr = c; k++; continue; } if ("([{".includes(c)) depth++; else if (")]}".includes(c)) depth--; else if ((c === "," || c === ";") && depth <= 0) break; k++; } return bundle.slice(idx, k); } const c = bundle[i]; if (c === "{" || c === "[" || c === "(") return bundle.slice(idx, matchDelims(bundle, i)); if (c === '"' || c === "'" || c === "`") { let k = i + 1; while (k < bundle.length) { const ch = bundle[k]; if (ch === "\\") { k += 2; continue; } if (ch === c) break; k++; } return bundle.slice(idx, k + 1); } let k = i; while (k < bundle.length && !",;\n}".includes(bundle[k])) k++; return bundle.slice(idx, k); };
-    const requiredSyms13 = ["Lk", "Fk", "xi", "mg", "Yk"];
+    const requiredSyms13 = ["Lk", "Fk", "Gf", "xi", "mg", "Yk"];
     const optionalSyms13 = ["Rf"];
     srcs = {};
     for (const s of requiredSyms13) srcs[s] = extractAssign(s);
@@ -46,7 +46,7 @@
   // blob: ONLY decrypt + store raw .b map
   const blobSrc = [
     "let wr=null;",
-    srcs.Lk, srcs.Fk, srcs.xi, srcs.mg, srcs.Yk,
+    srcs.Gf, srcs.Lk, srcs.Fk, srcs.xi, srcs.mg, srcs.Yk,
     'var wk=Lk, vk=Fk, Zp=xi, Li=mg, Ck=Yk;',
     'var jk="5b908a4bbef284d44ab65836eee87cb5375976b1";',
     'var kk="/c";',
