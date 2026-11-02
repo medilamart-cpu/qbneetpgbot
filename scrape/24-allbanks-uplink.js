@@ -329,6 +329,21 @@
     return Math.min(BACKOFF_BASE_MS * Math.pow(2, attempt - 1), MAX_WAIT_MS);
   };
 
+  // ================= CONNECTIVITY (wait out outages instead of skipping) =================
+  const waitForConnectivity24 = async () => {
+    let wait = 30000;
+    for (let i = 0; i < 10; i++) {
+      try {
+        const r = await fetch("/qbapi/me", { credentials: "include", cache: "no-store" });
+        if (r && r.ok) { log("connectivity restored"); return true; }
+      } catch (e) {}
+      warn("no connectivity — waiting " + Math.round(wait / 1000) + "s (attempt " + (i + 1) + "/10)");
+      await sleep(wait);
+      wait = Math.min(wait * 2, 300000);
+    }
+    return false;
+  };
+
   // ================= RANDOM GAP =================
   const randomGap = async (isLast) => {
     if (isLast) return;
@@ -352,6 +367,10 @@
       try {
         kr = await fetch("/qbapi/key?u=" + entry.keyId, { credentials: "include", cache: "no-store", headers: await stampHeaderFor24("/c/" + entry.keyId.slice(0, 2) + "/" + entry.keyId.slice(2)) });
       } catch (e) {
+        if (/fetch|network|connection|ERR_/i.test(String(e))) {
+          const ok = await waitForConnectivity24();
+          if (ok) { continue; }
+        }
         netTransient++;
         if (netTransient > MAX_TRANSIENT_RETRIES) { err("network fail x" + netTransient + " on key, skipping " + entry.path); return "skip"; }
         warn("network error on key (try " + netTransient + "):", String(e).slice(0, 60));
@@ -388,6 +407,10 @@
       try {
         br = await fetch(entry.blobUrl, { credentials: "include", cache: "force-cache", headers: await stampHeaderFor24(entry.blobUrl) });
       } catch (e) {
+        if (/fetch|network|connection|ERR_/i.test(String(e))) {
+          const ok = await waitForConnectivity24();
+          if (ok) { continue; }
+        }
         netTransient++;
         if (netTransient > MAX_TRANSIENT_RETRIES) { err("network fail on blob, skipping " + entry.path); return "skip"; }
         warn("network error on blob (try " + netTransient + "):", String(e).slice(0, 60));
