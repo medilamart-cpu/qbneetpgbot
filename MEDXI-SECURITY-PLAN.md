@@ -3,7 +3,7 @@
 **Target:** `medxi.site` (web app, question bank, video library)
 **Goal:** make bulk extraction materially harder than `qb.neetpgbot.in`, closing every gap that allowed ~300 files + full index + video catalogue to leave that site before its account pause fired.
 **Reference:** `scrape/SECURITY-ASSESSMENT.md` (R1–R15) and the live inspection of `medxi.site` on 2026-11-17.
-**Status:** Phase 0 and Phase 1 are **complete and live** on `medxi.site` (2026-11-17). All acceptance checks green (29/29 Phase 0, 17/17 entitlement gate, 11/11 locked rules, 20/20 server-write paths). Only the cost-sensitive "high-tech" items listed under Phase 1 remain deferred. See the implementation logs in §6.
+**Status:** Phase 0, Phase 1 and Phase 2 are **complete and live** on `medxi.site` (Phase 0/1 on 2026-11-17; Phase 2 on 2026-11-18). All acceptance checks green (29/29 Phase 0, 17/17 entitlement gate, 11/11 locked rules, 20/20 server-write paths, 16/16 Phase 2 device tracking). Phase 2 was deliberately shipped **monitor-only** (record devices for admin visibility, no limit/enforcement) to avoid the student lockouts caused by strict binding. Only the cost-sensitive "high-tech" items listed under Phase 1 remain deferred. See the implementation logs in §6 and §8.
 
 ---
 
@@ -200,36 +200,40 @@ Everything in the deferred list below is the only work still outstanding from Ph
 
 ---
 
-### Phase 2 — Device binding & session lifecycle (days 5–6)
+### Phase 2 — Device visibility (monitor-only) — ✅ COMPLETE / LIVE (2026-11-18)
 
-**Objective:** close qb's "device tracking existed but wasn't enforced" gap and its "login-only detection" gap. Implements R5.
+**Objective:** make devices visible to the admin so account sharing/abuse can be *investigated*, without changing student access. Originally this phase specified hard enforcement (2-device cap, per-request validation, auto-pause on mismatch). **That plan was modeled on qb's login-code system, which MedXI does not use** — MedXI uses Firebase/Google sign-in. Strict device binding on top of it is exactly what previously caused student lockouts (phone + laptop + tablet, or a browser update, gets treated as a new device). Per owner decision, Phase 2 shipped **monitor-only**.
 
-#### Tasks
+#### What shipped
 
-2.1 Issue a `deviceId` at first login (server-generated, not client-generated `crypto.randomUUID()` alone). Store a server-side record: `uid`, `deviceId`, `ua`, `sec-ch-ua`, JA4/TLS fingerprint, first/last seen, trust score.
+2.1 `syncAccount` (Admin SDK callable) generates a **server-side `deviceId`** on first login (`crypto.randomUUID()`), accepts harmless client-supplied browser details, and upserts a **capped (10) device history** on the user doc: `deviceId`, `browser`, `platform`, `language`, `screen`, `firstSeenAt`, `lastSeenAt`. Browser cannot write this field (locked rules); only the server can.
 
-2.2 **Max 2 active devices per account.** A new code signs out older devices (same UX as qb). Expose `active_device`, `is_active_device` in `/api/me` — but now **enforce** them.
+2.2 Client helper `src/utils/device.js` stores the returned `deviceId` locally (stable across logins) and collects only non-sensitive browser details. `AuthContext` passes them to `serverSyncAccount()` and stores the returned ID. Device recording failures can never block sign-in.
 
-2.3 Validate device on **every** `/api/*` and `/c/*` request: `deviceId` + `User-Agent` + `sec-ch-ua` + TLS/JA4 compared to the registered device. Mismatch → revoke tokens, pause account, notify user out-of-band.
+2.3 Worker `GET /api/me` (verified Firebase ID token) returns the signed-in student's own account summary plus `devices` / `deviceCount`, reusing the existing token-based Firestore read (no new key, no KV writes).
 
-2.4 **Weekly re-auth**, 30-day code validity, owner revocation (`code_revoked`), `too_many_attempts` backoff — mirror qb's login reasons (`qb_login.html:410-421`).
+2.4 Telegram admin bot: `formatUserMessage` shows a "Devices Seen" count; new `/devices <email>` command lists each device's browser/platform, ID and last-seen time.
 
-2.5 **Agent signals at login** (qb's `hg` / `ag` idea, improved): count `isTrusted` pointer/keydown events, flag UA patterns `Claude|Electron|Antigravity|Cursor|Windsurf|Kiro|Trae`, zero-size windows, Chromium-only UA without a known brand. Cloudflare Turnstile on top. **Repeat a lighter version continuously** — see Phase 3.
+#### Deliberately NOT done (to avoid lockouts)
 
-#### Acceptance criteria
+- No max-device limit, no sign-out of older devices, no per-request device validation, no auto-pause on mismatch.
+- No JA4/TLS fingerprint, `sec-ch-ua`, trust score, weekly re-auth, or agent-gesture heuristic. Those are enforcement mechanisms; monitor-only does not need them.
 
-- Copy a valid cookie into a second browser with a different UA → **401 + account paused**.
-- Third device login → older device revoked, old token → **401**.
-- Expired code / revoked code / >5 bad attempts → correct reason code and no session.
-- Headless login with 0 `isTrusted` gestures → `agent_browser` rejection.
+#### Acceptance criteria (monitor-only)
+
+- New login creates/repairs account and records one device; server-generated `deviceId` returned and echoed in `/api/me`.
+- Repeating a login with the same `deviceId` stays at one device (idempotent), not an ever-growing list.
+- Distinct devices accumulate and the history is capped at 10.
+- Account state (plan/coins/paused/admin) is unchanged — device tracking never gates access.
+- `/api/me` rejects unauthenticated requests (401).
 
 #### Verification
 
-Use two browser profiles and `curl -A` to simulate a transplanted session; confirm revocation in the audit log.
+16/16 PASS with one temporary Firebase identity (deleted in the same run): first-login ID generation, idempotency, multi-device accumulation, 10-device cap with unique IDs, `/api/me` account + device summary, and 401 without a token. `node scripts/verify-phase0.cjs --live` still **29/29 PASS** (no regressions).
 
 #### Rollback
 
-`DEVICE_BINDING_V2=off`; keep a support path to re-bind a legitimate device after phone upgrade.
+No flag is required: reverting means removing the four small additions (client helper/wiring, `syncAccount` device block, `/api/me`, bot `/devices`). Existing device history is harmless extra data on user docs. To stop new writes without a redeploy, the client `collectDeviceInfo()` call can be removed and the Functions redeployed.
 
 ---
 
@@ -363,7 +367,7 @@ Keep a `MEDIA_LEGACY_TOKEN` flag for one release; do not restore public direct l
 | Permanent content URLs | yes | **no (≤120 s)** |
 | Video links in static assets | key/nonce catalogue exported | **zero** |
 | Detection timing | login only | **continuous, minutes** |
-| Device enforcement | tracked, not enforced | **enforced every request** |
+| Device visibility | tracked, not enforced | **recorded + visible to admin (no enforcement —Phase 2 monitor-only)** |
 | Session on pause | stayed alive | **revoked immediately** |
 
 ---
@@ -376,7 +380,7 @@ Keep a `MEDIA_LEGACY_TOKEN` flag for one release; do not restore public direct l
 | R2 no full index / short-lived URLs | weak | Phase 0 + 1 |
 | R3 key throttling | missing | Phase 1.6 |
 | R4 short blob TTL | weak | Phase 1.4 / 4 |
-| R5 device binding every request | partial | Phase 2 |
+| R5 device visibility (binding intentionally deferred — monitor-only) | partial | Phase 2 (monitor-only) |
 | R6 honeypots | missing | Phase 3.3 |
 | R7 progressive unlock | missing | Phase 3.4 |
 | R8 server-side decryption / DRM | video DRM only | Phase 4 |
@@ -807,4 +811,42 @@ Playback links are self-authorising HMAC tokens with a **4-hour TTL** (a full le
 
 ---
 
-**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired.
+## 8. Implementation log — Phase 2 (monitor-only device visibility, 2026-11-18)
+
+**Repository:** `D:\NEW\mcq-app` (GitHub `medilamart-cpu/medxi`), branch `security/phase-0`.
+**Decision:** owner chose **monitor-only** device binding after being shown that the plan's strict options (2-device cap, per-request validation, auto-pause) are the exact ones that previously locked out students. MedXI uses Firebase/Google sign-in, not qb's login-code system, so hard device binding adds friction without a matching benefit. No device limit, no enforcement, no access change.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `src/utils/device.js` (new) | `getStoredDeviceId()` / `storeDeviceId()` (stable `medxi_device_id` in localStorage) and `collectDeviceInfo()` returning the stored ID plus harmless browser details (UA, platform, language, screen). No fingerprinting. |
+| `src/utils/serverAccount.js` | `serverSyncAccount(refCode, device)` now sends `{ refCode, device }` to `syncAccount`. |
+| `src/context/AuthContext.jsx` | On auth, collects device info, passes it to `serverSyncAccount`, and stores the returned `deviceId`. Failure to record a device can never block sign-in. |
+| `functions/account.js` | `syncAccount` generates a server-side `deviceId` (`crypto.randomUUID()`) when absent, sanitises browser details, upserts a capped 10-entry `devices` history on the user doc (Admin SDK writes only), and returns `deviceId`. |
+| `worker-data-gate/src/index.js` | New `GET /api/me` returns the signed-in account summary + `devices` / `deviceCount` using the existing verified-ID-token Firestore read. |
+| `telegram-bot/bot.cjs` (gitignored, VPS only) | Fail-closed `isAuthorized()` (from the earlier fix) plus device visibility: "Devices Seen" count in profiles and a `/devices <email>` detail command. |
+| `firestore.rules` | Unchanged — already blocks browser writes to `devices` (profile whitelist) and reads remain allowed. |
+
+### Bug found and fixed during verification
+
+Initial deploy used `FieldValue.serverTimestamp()` for `firstSeenAt` / `lastSeenAt` inside the `devices` array. Firestore rejects sentinels inside arrays: `FieldValue.serverTimestamp() cannot be used inside of an array`. Fixed by using plain `Date` objects, redeployed Functions, and re-ran verification.
+
+### Deployment IDs / rollback
+
+- Cloud Functions redeployed (`syncAccount` + 5 others), `us-central1`, project `medquiz-c05e9`.
+- Worker `medxi-data-gate` version: **`a3e2a15f-f21a-40af-b702-6db7fd233926`** (route `data.medxi.site/*`).
+- Pages deployment: live bundle **`index-L3904iSx.js`** (`AuthContext-ChJMX9X5.js`), aliases `medxi.site` / `www.medxi.site`.
+- Bot: `/home/ubuntu/medxi-bot/bot.cjs` on VPS `168.138.115.5` (service `medxi-bot` active); backup `bot.cjs.bak-before-phase2`.
+- Firestore rules unchanged: active `ce1309f7-34d5-49bf-a000-1c298546e72f`, rollback `dff88fd0-616f-4d3d-95cf-0fe32203d565`.
+
+### Verification results
+
+- Phase 2 device flow: **16/16 PASS** — server-generated ID, one device on first login, Edge detected, idempotent repeat, multi-device accumulation, 10-device cap with unique IDs, `/api/me` reflects account + 10 devices, 401 without token.
+- `node scripts/verify-phase0.cjs --live`: **29/29 PASS / ALL CHECKS PASSED** (no regressions).
+- Live bundle confirmed `index-L3904iSx.js`; legacy notice `legacy-app-notice.js` still served 200.
+- All temporary Firebase identities deleted and verified: full user list scanned (1,468 users), **0** `phase2verify-*` identities remaining. Temporary scripts removed.
+
+---
+
+**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phase 2 caveat:** device binding was intentionally delivered as monitor-only, so the "enforced every request" / session-revocation metrics are not claimed as met by Phase 2.
