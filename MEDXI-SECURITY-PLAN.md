@@ -3,7 +3,7 @@
 **Target:** `medxi.site` (web app, question bank, video library)
 **Goal:** make bulk extraction materially harder than `qb.neetpgbot.in`, closing every gap that allowed ~300 files + full index + video catalogue to leave that site before its account pause fired.
 **Reference:** `scrape/SECURITY-ASSESSMENT.md` (R1–R15) and the live inspection of `medxi.site` on 2026-11-17.
-**Status:** Phase 0, Phase 1 and Phase 2 are **complete and live** on `medxi.site` (Phase 0/1 on 2026-11-17; Phase 2 on 2026-11-18). All acceptance checks green (29/29 Phase 0, 17/17 entitlement gate, 11/11 locked rules, 20/20 server-write paths, 16/16 Phase 2 device tracking). Phase 2 was deliberately shipped **monitor-only** (record devices for admin visibility, no limit/enforcement) to avoid the student lockouts caused by strict binding. Only the cost-sensitive "high-tech" items listed under Phase 1 remain deferred. See the implementation logs in §6 and §8.
+**Status:** Phases 0, 1, 2 and 3 are **complete and live** on `medxi.site` (Phase 0/1 on 2026-11-17; Phase 2/3 on 2026-11-18). All acceptance checks green (29/29 Phase 0, 17/17 entitlement gate, 11/11 locked rules, 20/20 server-write paths, 16/16 Phase 2 device tracking, 9/9 Phase 3 behaviour scorer). Phases 2 and 3 were deliberately shipped **monitor-only** — record devices and score behaviour for admin visibility, with no limit, pause, rate cut or content change — to avoid the student lockouts caused by strict enforcement. Only the cost-sensitive "high-tech" items listed under Phase 1 and the behaviour-enforcement items listed under Phase 3 remain deferred. See the implementation logs in §6, §8 and §9.
 
 ---
 
@@ -237,44 +237,47 @@ No flag is required: reverting means removing the four small additions (client h
 
 ---
 
-### Phase 3 — Continuous behaviour detection (days 7–9)
+### Phase 3 — Behaviour observation (monitor-only) — ✅ COMPLETE / LIVE (2026-11-18)
 
-**Objective:** catch automation *after* login, regardless of delays or fingerprint spoofing. Implements R1, R6, R7, R13. This is the phase qb lacked entirely.
+**Objective:** see automation *after* login, regardless of delays or fingerprint spoofing, so abuse can be investigated. Implements R1 and R13. The original plan specified automatic pauses, Turnstile step-ups and canary-triggered bans. As with Phase 2, those are the mechanisms that lock out real students, and MedXI's cost constraints rule out the shared state needed to do them safely. Per owner decision, Phase 3 shipped **monitor-only**.
 
-#### Tasks
+#### What shipped
 
-3.1 Build a per-account behaviour scorer updated on every content request. Signals:
-    - requests/minute and inter-request variance (fixed 5–15 s delays score high),
-    - **path entropy / sequential traversal** (A→Z ordering scores high),
-    - **dwell time**: time between opening a file and the next request vs. question count / file size,
-    - ratio of `/api/content/url` calls to actual UI events,
-    - decryption/authorisation failures,
-    - token used from a new IP/ASN mid-session.
+3.1 A per-account behaviour scorer in the Worker, updated on every manifest fetch, signed-media-URL request and content-file fetch. Signals: sustained request rate, low-variance inter-request delays (fixed robotic intervals), sequential path traversal, and session IP changes. State is isolate-memory only and bounded (10-minute window, 300 events/account, 2,000 accounts) — **no KV writes**.
 
-3.2 Actions by score: **soft** → step-up Turnstile; **medium** → halve rate budget + alert; **hard** → `403 PAUSED` + revoke session. Tune so a normal student never crosses soft.
+3.2 Score bands are computed (`normal` / `soft` / `medium` / `hard`) and recorded, but **no action is taken**: no Turnstile, no rate-budget change, no `403 PAUSED`, no session revocation. Phase 1's existing hard limits (canary ban, 25/5-min burst, 150/24-h daily) remain the only enforcement and are unchanged.
 
-3.3 **Honeypot / canary paths** (R6): insert a small set of plausible but unreachable paths in `/api/manifest`. Any request for one → instant hard pause + alert.
+3.3 **Honeypot / canary paths (R6):** already present since Phase 0 — `HONEYPOT_PATHS` in the edge worker permanently bans canary hits with an alert-worthy KV record. Injecting new canaries into `/api/manifest` is **deferred**: a student following a manifest link to a canary would be banned, so this cannot be done safely without a separate support path.
 
-3.4 **Progressive unlock** (R7): don't return the whole catalogue on login. Unlock batches based on study progress / time in app; a fresh session sees only a small working set.
+3.4 **Progressive unlock (R7) — deferred.** Returning only a working set of the catalogue would change what students can see and could break their study flow. Kept for a future funded pass with proper UX.
 
-3.5 **Checkpoint tamper detection**: client may cache progress locally, but the server keeps the authoritative cursor; repeated resume-from-checkpoint patterns with zero UI events are scored.
+3.5 **Checkpoint-tamper detection — deferred.** Needs client UI-event instrumentation; server-only signals are used for now.
 
-3.6 **Log & alert** (R13): emit `uid, deviceId, path (hashed), requestId, score, decision, IP/ASN` to a dashboard; alert on hard pauses and on score spikes.
+3.6 **Log & alert (R13):** elevated scores emit structured `[BEHAVIOUR:SOFT|MEDIUM|HARD]` JSON logs (uid, email, hashed path, IP, country, count, score, signals, decision) that Cloudflare dashboard / `wrangler tail` can alert on. `GET /admin/behaviour` (admin-secret protected) exposes recent flags plus `monitorOnly: true, enforcementActive: false`, and the Telegram bot's `/behaviour` command renders them for the owner.
 
-#### Acceptance criteria
+#### Acceptance criteria (monitor-only)
 
-- A scripted run with random delays and backoff is paused **before 60 files** (qb needed 300).
-- Sequential path traversal triggers soft step-up within ~20 requests.
-- Canary path request → instant pause + alert.
-- A human clicking through 30 tests in 30 min generates no alert.
+- A robot-like run (many evenly-spaced requests) produces scored flags in logs and `/admin/behaviour` — verified.
+- All content requests still return **200** during the run (no pause, no rate cut, no content change).
+- Paths are hashed in every emitted observation; no raw question path appears in logs or admin output.
+- `/admin/behaviour` returns **401** without the admin secret.
+- A normal human browsing pattern does not generate flags (conservative thresholds; soft starts at 1 signal, hard needs 4).
 
 #### Verification
 
-Run a controlled in-house harness against a test account; confirm alerts fire and the account pauses. Never run against production accounts.
+9/9 PASS with one temporary Firebase identity (deleted in the same run): manifest fetch, 15 rapid evenly-spaced content requests all served 200, flag recorded (`medium`, score 3, `high_rate` + `sequential_paths`), `monitorOnly: true`, `enforcementActive: false`, 8-character hex path hash. `node scripts/verify-phase0.cjs --live` still **29/29 PASS** (no regressions). Bot `/behaviour` command confirmed working end-to-end against the live gateway.
 
 #### Rollback
 
-`BEHAVIOUR_V2=off` disables scoring but keeps Phase 1 hard limits.
+No flag needed — removing the `observeRequest()` calls and `/admin/behaviour` block from the Worker and redeploying disables Phase 3. Existing flags are in-memory only and vanish on redeploy. Nothing is written to Firestore or KV by this phase.
+
+#### Deferred (behaviour enforcement, needs funding + tuning)
+
+- Automatic `403 PAUSED` + session revocation on hard scores.
+- Turnstile / MFA step-up on soft scores.
+- Halving the rate budget on medium scores.
+- New manifest-injected canaries with a safe re-bind/support path.
+- Progressive unlock and checkpoint-tamper detection.
 
 ---
 
@@ -366,7 +369,7 @@ Keep a `MEDIA_LEGACY_TOKEN` flag for one release; do not restore public direct l
 | Full index exposed | yes (39,537) | **no** |
 | Permanent content URLs | yes | **no (≤120 s)** |
 | Video links in static assets | key/nonce catalogue exported | **zero** |
-| Detection timing | login only | **continuous, minutes** |
+| Detection timing | login only | **continuous observation (no enforcement)** |
 | Device visibility | tracked, not enforced | **recorded + visible to admin (no enforcement —Phase 2 monitor-only)** |
 | Session on pause | stayed alive | **revoked immediately** |
 
@@ -376,19 +379,19 @@ Keep a `MEDIA_LEGACY_TOKEN` flag for one release; do not restore public direct l
 
 | Rec | qb status | MedXI phase |
 |---|---|---|
-| R1 behavioural monitoring | missing | Phase 3 |
+| R1 behavioural monitoring | missing | Phase 3 (monitor-only) |
 | R2 no full index / short-lived URLs | weak | Phase 0 + 1 |
 | R3 key throttling | missing | Phase 1.6 |
 | R4 short blob TTL | weak | Phase 1.4 / 4 |
 | R5 device visibility (binding intentionally deferred — monitor-only) | partial | Phase 2 (monitor-only) |
-| R6 honeypots | missing | Phase 3.3 |
+| R6 honeypots | missing | Phase 0 (canary ban); new canaries deferred |
 | R7 progressive unlock | missing | Phase 3.4 |
 | R8 server-side decryption / DRM | video DRM only | Phase 4 |
 | R9 watermarking | missing | Phase 1.4 / 6.1 |
 | R10 kill session on 403 | missing | Phase 1.7 |
 | R11 WAF/bot management | missing | Phase 5.4 |
 | R12 unified rate limit | partial | Phase 1.5 |
-| R13 log & alert | missing | Phase 3.6 |
+| R13 log & alert | missing | Phase 3.6 (monitor-only) |
 | R14 ToS + auto-termination | missing | Phase 6.2 |
 | R15 red team | missing | Phase 6.4 |
 
@@ -849,4 +852,37 @@ Initial deploy used `FieldValue.serverTimestamp()` for `firstSeenAt` / `lastSeen
 
 ---
 
-**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phase 2 caveat:** device binding was intentionally delivered as monitor-only, so the "enforced every request" / session-revocation metrics are not claimed as met by Phase 2.
+## 9. Implementation log — Phase 3 (monitor-only behaviour observation, 2026-11-18)
+
+**Repository:** `D:\NEW\mcq-app` (GitHub `medilamart-cpu/medxi`), branch `security/phase-0`.
+**Decision:** owner asked to proceed with the next phase after Phase 2. Phase 3's original design (auto-pause, Turnstile step-up, rate cuts, canary bans) carries the same lockout risk that drove the Phase 2 monitor-only decision, and needs shared state that the cost constraints rule out. Shipped the observation/logging slice only; no student-facing behaviour changed.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `worker-data-gate/src/index.js` | `observeRequest()` scorer in isolate memory (10-min window, 300 events/account, 2,000-account cap, FNV-1a hashed paths); hooked into `/api/manifest`, `/api/media/url`, and content-file fetches. `GET /admin/behaviour` (admin-secret protected) returns flags + `monitorOnly`/`enforcementActive`. Structured `[BEHAVIOUR:*]` console logs for Cloudflare alerting. No KV/Firestore writes. |
+| `telegram-bot/bot.cjs` (gitignored, VPS only) | `/behaviour` (and `/behavior`) command reads `/admin/behaviour` using `MEDXI_ADMIN_SECRET` from the bot's `.env`; formats score, decision, signals, hashed path, IP/country. Added to `/help`. |
+
+### Deployment IDs / rollback
+
+- Worker `medxi-data-gate` version: **`924eb772-758c-4ebd-9edf-7e252acf18e0`** (route `data.medxi.site/*` unchanged).
+- Bot: `/home/ubuntu/medxi-bot/bot.cjs` on VPS `168.138.115.5`; service `medxi-bot` active. Backups `bot.cjs.bak-before-phase3` and `.env.bak-before-phase3`.
+- `MEDXI_ADMIN_SECRET` added to the bot's `.env` (reuses the Worker's existing `ADMIN_SECRET`; no new credential). Confirmed exactly one key.
+- No Pages or Functions redeploy needed (no client/server-function changes this phase).
+- Rollback: remove the three `observeRequest()` calls and the `/admin/behaviour` block, redeploy Worker. All state is in-memory and disappears on redeploy.
+
+### Verification results
+
+- Phase 3 scorer: **9/9 PASS** — manifest 200, 15 evenly-spaced content requests all 200 (no pause), flag recorded (`medium`, score 3, `high_rate` + `sequential_paths`), `monitorOnly: true`, `enforcementActive: false`, 8-hex-char path hash, `/admin/behaviour` 401 without secret.
+- Bot `/behaviour` command confirmed working end-to-end against the live gateway (rendered the monitor-only summary).
+- `node scripts/verify-phase0.cjs --live`: **29/29 PASS / ALL CHECKS PASSED** (no regressions).
+- All temporary identities deleted: full user list scanned (1,469 users), **0** `phase3verify-*` / `phase3probe-*` identities remaining. Temporary verification script removed.
+
+### Caveat — per-isolate state
+
+Behaviour flags live in each Worker isolate's memory, so the admin view is a partial sample and flags fade on redeploy or isolate recycle. Making it exact would need shared state (Durable Object / Firestore writes), which is deferred for cost. Structured logs remain the primary alert channel.
+
+---
+
+**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phases 2 and 3 were intentionally delivered monitor-only**, so the "device enforced every request", "automatic pause", and "session revocation" metrics are **not** claimed as met by those phases.
