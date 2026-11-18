@@ -949,7 +949,7 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 
 **Reason:** Upstash free (500K commands/month) showed 1,630 commands in 49 minutes during verification, mostly from test traffic. Supabase Free lists 50,000 MAU, 500 MB DB, 5 GB egress and unlimited API requests at $0/month, which is far above this app's 1,604 registered users and ~1-2 MB of state. Owner chose migration over write-tuning Upstash. This also removes the Upstash `2026-11-21` claim deadline.
 
-**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Final live Worker version: **`e97a4cba-ce0b-4bf8-8303-3ba7a390861f`** on route `data.medxi.site/*`. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source.
+**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Final live Worker version: **`f211dd2f-18dc-4b6e-92fc-d4dead71c449`** on route `data.medxi.site/*`. A follow-up safety guard now activates Turnstile only when **both** `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` exist, so a half-configured secret cannot demand a challenge the page cannot render. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source.
 
 ### What changed
 
@@ -962,7 +962,7 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 
 ### Verification results
 
-- `node scripts/verify-phase4.cjs`: **21/21 PASS** - canary injected into manifest, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile dormant, shared-state inspection correct.
+- `node scripts/verify-phase4.cjs`: **21/21 PASS** - canary injected into manifest, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile dormant, shared-state inspection correct. Re-run after the Turnstile both-key guard: **21/21 PASS** again.
 - Live `/admin/enforcement`: **`mode=shadow`**, `active=false`, `sharedState=true`, `turnstileConfigured=false`, `progressiveUnlock=false`.
 - Supabase table cleaned after testing: only the `global` row remains; all `user:*` test rows and the `probe:test` row were deleted.
 - Firebase Auth sweep: **1,617 users, 0** `phase4verify-*` / `manifestprobe-*` identities remaining.
