@@ -949,7 +949,7 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 
 **Reason:** Upstash free (500K commands/month) showed 1,630 commands in 49 minutes during verification, mostly from test traffic. Supabase Free lists 50,000 MAU, 500 MB DB, 5 GB egress and unlimited API requests at $0/month, which is far above this app's 1,604 registered users and ~1-2 MB of state. Owner chose migration over write-tuning Upstash. This also removes the Upstash `2026-11-21` claim deadline.
 
-**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Worker version at the end of the Supabase migration: **`f211dd2f-18dc-4b6e-92fc-d4dead71c449`** on route `data.medxi.site/*`. A follow-up safety guard activates Turnstile only when **both** `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` exist, so a half-configured secret cannot demand a challenge the page cannot render. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source. The current live Worker is **`86ae480d-eff5-4a8b-868d-75d181ed36ed`** (see §12).
+**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Worker version at the end of the Supabase migration: **`f211dd2f-18dc-4b6e-92fc-d4dead71c449`** on route `data.medxi.site/*`. A follow-up safety guard activates Turnstile only when **both** `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` exist, so a half-configured secret cannot demand a challenge the page cannot render. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source. The current live Worker is **`ede2599d-4ff8-488b-8fe0-6829443e25f7`** (see §12–13).
 
 ### What changed
 
@@ -962,7 +962,7 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 
 ### Verification results
 
-- `node scripts/verify-phase4.cjs`: **22/22 PASS** - canary injected into manifest, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile configured with the live widget keys, shared-state inspection correct. Mode restored to `shadow`, `progressiveUnlock=off`, `turnstile=on` after the run.
+- `node scripts/verify-phase4.cjs`: **24/24 PASS** - canaries injected only for scripted clients and hidden from browser-like clients, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile configured with the live widget keys, shared-state inspection correct. Mode restored to `shadow`, `progressiveUnlock=off`, `turnstile=on` after the run.
 - Live `/admin/enforcement` after final integration: **`mode=shadow`**, `active=false`, `sharedState=true`, `turnstileConfigured=true`, `progressiveUnlock=false`, all six enforcement features `on`.
 - Supabase table cleaned after testing: all temporary `user:*` test rows and the `probe:test` row were deleted; real user rows were left intact.
 - Firebase Auth sweep: **1,617 users, 0** `phase4verify-*` / `manifestprobe-*` identities remaining; the temporary `turnstileverify-*` identity was deleted.
@@ -998,17 +998,58 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 | `worker-data-gate/src/index.js` | Canonical `siteverify` at `https://challenges.cloudflare.com/turnstile/v0/siteverify`. Requires `data.success === true`, `data.action === 'medxi_step_up'`, and `data.hostname` in `TURNSTILE_HOSTNAMES`. Missing/invalid token, wrong action, wrong hostname, non-OK response, timeout or network error all return `CHALLENGE_FAILED` (fail-closed once keys exist). `POST /api/challenge` marks the challenge on success. |
 | `worker-data-gate/wrangler.json` | `TURNSTILE_HOSTNAMES=medxi.site` production var. Local `.dev.vars` allows `localhost,127.0.0.1,medxi.site`. |
 | `src/firebase/config.js` | Widget renders with `action: 'medxi_step_up'`; `gatewayFetch()` handles `TURNSTILE_REQUIRED`, posts the token to `/api/challenge`, then retries once. No separate `VITE_TURNSTILE_SITE_KEY` needed — the Worker returns the site key in the challenge response. |
-| `scripts/verify-phase4.cjs` | Disables `turnstile` only for the deterministic canary test, then restores it to `on`. 22 checks. |
+| `scripts/verify-phase4.cjs` | Disables `turnstile` only for the deterministic canary test, then restores it to `on`. 24 checks. |
 
-**Deployments:** Worker **`86ae480d-eff5-4a8b-868d-75d181ed36ed`** on `data.medxi.site/*`; Pages **`361938cb`** (`https://361938cb.medxi.pages.dev`), bundles `index-Byb_HuhV.js` and `AuthContext-Dd3b8Qf4.js`.
+**Deployments:** Worker **`ede2599d-4ff8-488b-8fe0-6829443e25f7`** on `data.medxi.site/*`; Pages **`361938cb`** (`https://361938cb.medxi.pages.dev`), bundles `index-Byb_HuhV.js` and `AuthContext-Dd3b8Qf4.js`.
 
 **Trigger conditions:** master mode `active` AND feature `turnstile=on` AND both keys present AND shared score `>= 2` AND no prior completed challenge. Because mode is still `shadow`, real traffic never sees the widget.
 
 ### Validation
 
-- `node scripts/verify-phase4.cjs`: **22 passed, 0 failed**.
+- `node scripts/verify-phase4.cjs`: **24 passed, 0 failed** after the stricter thresholds in §13.
 - Real-token end-to-end from `https://medxi.site/app-update.html` (static page on the production hostname): fresh Turnstile token with `action=medxi_step_up` → `POST /api/challenge` returned **200 `{"success":true,"message":"Verification complete."}`**; replaying the same token returned **403 `CHALLENGE_FAILED`**. Siteverify reported `hostname=medxi.site`.
 - Dummy-token probe confirmed the stored secret is valid; no secret value was ever printed or committed.
 - Temporary Firebase identity and its Supabase state row were deleted after validation; no temp scripts remain.
 
 **Fail-open invariant unchanged:** any Supabase error, missing secret, timeout or quota edge returns `null`; `checkGuard` then reports no pause/revocation/score/challenge and the student keeps access. Master mode remains `shadow`, so nothing is enforced on real traffic during migration.
+
+---
+
+## 13. Phase 4d - enforcement tuning and local inspection (2026-11-18)
+
+**Owner decision after reviewing the risk of student lockouts:** first add safety rails, then tighten the specific deterrence thresholds. Both steps are deployed; **`mode` stays `shadow`** until the owner explicitly approves activation.
+
+### Safety rails kept
+
+| Rail | Behaviour |
+|---|---|
+| Hidden canaries | `syncIndex` trap paths are only returned to requests without browser same-site metadata, or to accounts that already carry a review signal. A normal student's browser never sees a clickable canary. |
+| Behaviour auto-pause | Requires score `>= 5` **and** at least two independent signals. One strong signal alone cannot pause an account. |
+| Score-read race | Checkpoint score is awaited before the checkpoint row is written, so the two Supabase read-modify-writes cannot lose each other's data. |
+| `admin/state` | Reports `canaryHits`, and `admin/unpause` clears it, so an admin can see and reset review state. |
+| Progressive unlock | Still `off` by default. |
+
+### Stricter thresholds the owner chose
+
+| Setting | Before | Now |
+|---|---|---|
+| Canary hit consequence | First hit review-only, pause on repeat | **First hit pauses** (`ENF_CANARY_PAUSE_AFTER=1`) |
+| Turnstile step-up | shared score `>= 2` | **shared score `>= 1`** (both the media and MCQ paths) |
+| Checkpoint-tamper jump | `> 50`, weight `+1` | **`> 25`, weight `+2`** |
+
+**Honest limitation:** these are detection + friction, not a wall. A scraper with a real account and browser-like timing can stay under them. The actual deterrence is the layered design — auth-gated manifest, no raw media/PDF links, signed short-lived URLs, hidden origin, bot-UA block, permanent classic-honeypot ban, and (once active) account pause + refresh-token revocation. Soft thresholds alone do not keep a determined scraper away.
+
+### Local inspection
+
+Started for owner review:
+- Vite dev server: `http://127.0.0.1:5173/`
+- Wrangler dev Worker: `http://127.0.0.1:8787/`
+
+### Verification
+
+- `node scripts/verify-phase4.cjs`: **24 passed, 0 failed** - canaries hidden from browser-like clients, immediate canary pause, checkpoint score `>= 2`, unpause restores access.
+- Live `/admin/enforcement`: `mode=shadow`, `sharedState=true`, `turnstileConfigured=true`, `progressiveUnlock=false`, all six features on.
+- Temp Firebase identity and Supabase row deleted after the run.
+- Current Worker: **`ede2599d-4ff8-488b-8fe0-6829443e25f7`**.
+
+**Activation still requires owner approval.** No real traffic is enforced while `mode=shadow`.
