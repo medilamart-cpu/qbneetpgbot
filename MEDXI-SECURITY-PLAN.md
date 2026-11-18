@@ -885,4 +885,62 @@ Behaviour flags live in each Worker isolate's memory, so the admin view is a par
 
 ---
 
-**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phases 2 and 3 were intentionally delivered monitor-only**, so the "device enforced every request", "automatic pause", and "session revocation" metrics are **not** claimed as met by those phases.
+## 10. Implementation log — Phase 4 (shared-state enforcement, 2026-11-18)
+
+**Repository:** `D:\NEW\mcq-app` (GitHub `medilamart-cpu/medxi`), branch `security/phase-0`.
+**Decision:** the owner asked for all six deferred enforcement items, using a free alternative to Cloudflare's paid state products. Selected **Upstash Redis free tier** (500K commands/month, 250 MB, HTTPS REST callable from a Worker, no card). Firestore was the runner-up (20K writes/day). Every shared-state read/write **fails open**: if Redis is unavailable or its quota is exhausted, enforcement is skipped and students keep access. No new Firebase service-account key, no gateway KV writes.
+
+### Master switches (deliberately conservative)
+
+- `mode = shadow` by default — decisions are logged, nothing is enforced.
+- Feature switches: `autoPause=true`, `turnstile=true`, `rateCuts=true`, `canaries=true`, `checkpointTamper=true`, **`progressiveUnlock=false`** (it hides 80% of the catalogue on day one; enable only with owner approval).
+- Turnstile code is present but **dormant** until Cloudflare dashboard widget keys exist. No lockout without keys.
+- Flip with `/admin/enforcement` (master) or `/admin/feature` (one automation), from the admin bot or Worker.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `worker-data-gate/src/index.js` | Shared enforcement state in free Redis: atomic `EVAL` guard (pause + refresh-token revocation + score + challenge state in one command), auto-pause, session revocation, score-based rate cuts, manifest canaries (`syncIndex`), progressive unlock (2 providers per 40 trusted interactions), trusted UI-event endpoint, authoritative checkpoint endpoint with >25-index jump detection (suppressed when trusted UI events exist), `TURNSTILE_REQUIRED` step-up + `/api/challenge`, and admin endpoints `/admin/enforcement`, `/admin/feature`, `/admin/state`, `/admin/paused`, `/admin/unpause`, `/admin/unlock`. Fail-open everywhere; mode cached 60s to protect the free quota. |
+| `functions/enforce.js` (new) | `adminEnforce` internal hook: mirrors pause into Firestore (`paused`, `pauseReason`, `pausedAt`) and calls `auth.revokeRefreshTokens(uid)`. Protected by the existing `ADMIN_SECRET` (as `MEDXI_ADMIN_SECRET`); no new credential. Also handles `unpause` and `alert`. |
+| `functions/index.js` | Exports `adminEnforce`. |
+| `src/firebase/config.js` | `reportUiEvent()` (only genuine `isTrusted` interactions, throttled), `getCheckpoint()` / `reportCheckpoint()`, and `gatewayFetch()` handling of `TURNSTILE_REQUIRED` (dynamically loads the Turnstile script, shows a widget, POSTs `/api/challenge`, retries once). |
+| `src/pages/QBank.jsx` | Reports trusted provider/collection/subject/sort interactions. |
+| `src/pages/QuizScreen.jsx` | Reports trusted answer selections and checkpoint position per question. |
+| `telegram-bot/bot.cjs` (gitignored, VPS only) | `/enforcement`, `/enforce active|shadow`, `/feature <name> on|off`, `/paused`, `/unpause <uid>`, `/enfstate <uid>`; all added to `/help`. |
+| `scripts/verify-phase4.cjs` (kept as regression suite) | 20 checks covering canary injection, progressive unlock, trusted-event unlock, checkpoint tamper, canary-triggered auto-pause, admin unpause, Turnstile dormancy and shared-state inspection. Restores `shadow` + `progressiveUnlock=off` and deletes its temp identity in `finally`. |
+
+### Live leak found and fixed during rollout
+
+`node scripts/verify-phase0.cjs --live` initially failed two checks: `https://medxi.site/qbank_manifest.json` and `/video_vault.enc` returned **HTTP 200 with real content** on the old production Pages deployment (confirmed by Content-Type `application/json` / `application/octet-stream`, not the SPA HTML fallback). The freshly built `dist/` excludes both files and ships `_redirects` rules; a new production Pages deployment now returns **302** for both. Old deployments were not deleted, so legacy PWAs keep their reinstall/update notice.
+
+### Deployment IDs / rollback
+
+- Worker `medxi-data-gate` version: **`1b884c94-09b2-4cd5-bfc7-57ec8ec979c9`** (route `data.medxi.site/*` unchanged). Earlier Phase 4 versions `63c7148d-…`, `856cecc3-…`, `46059fc2-…` were superseded. The final change shortened the mode cache from 60s to 15s so an emergency flip back to `shadow` propagates quickly.
+- Cloud Function `adminEnforce` (us-central1): `https://us-central1-medquiz-c05e9.cloudfunctions.net/adminEnforce`.
+- Worker secrets: `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN`, `ENFORCE_FUNCTION_URL`; Functions `.env`: `MEDXI_ADMIN_SECRET` (gitignored, never printed).
+- Pages production deployment: **`251e8b2c`** (branch `main`), preview `e4abece7` (branch `security-phase-0`); live bundle **`index-DbQsXylW.js`**, shared chunk **`AuthContext-Dr3d9uM9.js`**. Old deployments retained.
+- Bot: `/home/ubuntu/medxi-bot/bot.cjs` on VPS `168.138.115.5`; service `medxi-bot` active. Backup `bot.cjs.bak-before-phase4`.
+- Rollback: set `/admin/enforcement` to `shadow` (instant, no deploy needed), or `/admin/feature <name> off` for one automation. Full rollback: redeploy the previous Worker version and remove the `adminEnforce` export. Redis state can be cleared with `admin/unpause` + `admin/unlock`.
+
+### Verification results
+
+- Phase 4 suite: **20/20 PASS** — canary injected into manifest, unlock batch 1 → 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile dormant, shared-state inspection correct. Mode restored to `shadow` and `progressiveUnlock=off` after the run.
+- `node scripts/verify-phase0.cjs --live`: **ALL CHECKS PASSED** — including the two previously failing public-file checks (now 302) and all bundle-leak checks.
+- Production bundle `index-DbQsXylW.js` live; shared chunk contains `TURNSTILE_REQUIRED` / `/api/ui-event` / `/api/checkpoint` / `/api/challenge`.
+- Full Firebase Auth scan: 1,604 users, **0** `phase4verify-*` / `manifestprobe-*` identities remaining.
+- Client `npm run build` clean; Worker, Functions, bot all `node --check` clean.
+
+### Outstanding owner actions (no lockouts if delayed)
+
+1. **Claim the free Upstash DB before 2026-11-21:** https://upstash.com/start-redis/console/3d986754-7eb0-41b8-bdd6-298965f4ad1f — free, no card. Unclaimed databases are deleted; fail-open keeps students studying, but enforcement state would stop.
+2. **Turnstile step-up:** create a Cloudflare Turnstile widget, set Worker secrets `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY`, and client `VITE_TURNSTILE_SITE_KEY`. Until then the challenge path never triggers.
+3. **Activation (owner approval required):** `/enforce active`, then optionally `/feature progressiveUnlock on`. Keep `shadow` until the owner is comfortable watching `/paused` and `/behaviour`.
+
+### Known caveat
+
+The existing 4-hour signed video/notes tokens keep working after a pause because they are self-authorising HMAC tokens. Pause enforcement on the gateway uses the Redis revocation timestamp compared with the token's `auth_time`, plus Firebase refresh-token revocation via `adminEnforce`. This closes new token minting and gateway access; an already-issued short-lived playback token may survive until its own expiry.
+
+---
+
+**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phases 2 and 3 were intentionally delivered monitor-only**, so the "device enforced every request", "automatic pause", and "session revocation" metrics were **not** claimed met at those stages. **Phase 4 implements the enforcement machinery (shadow by default, `progressiveUnlock` off, Turnstile dormant until keys exist)** — the full "done" criteria apply only after the owner activates and validates in `active` mode.
