@@ -943,13 +943,13 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 
 ---
 
-**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phases 2 and 3 were intentionally delivered monitor-only**, so the "device enforced every request", "automatic pause", and "session revocation" metrics were **not** claimed met at those stages. **Phase 4 implements the enforcement machinery (shadow by default, `progressiveUnlock` off, Turnstile dormant until keys exist)** — the full "done" criteria apply only after the owner activates and validates in `active` mode.
+**Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phases 2 and 3 were intentionally delivered monitor-only**, so the "device enforced every request", "automatic pause", and "session revocation" metrics were **not** claimed met at those stages. **Phase 4 implements the enforcement machinery (shadow by default, `progressiveUnlock` off, Turnstile wired and configured but unreachable until the master mode is `active`)** — the full "done" criteria apply only after the owner activates and validates in `active` mode.
 
 ## 11. Phase 4b - Supabase shared-state migration (2026-11-18)
 
 **Reason:** Upstash free (500K commands/month) showed 1,630 commands in 49 minutes during verification, mostly from test traffic. Supabase Free lists 50,000 MAU, 500 MB DB, 5 GB egress and unlimited API requests at $0/month, which is far above this app's 1,604 registered users and ~1-2 MB of state. Owner chose migration over write-tuning Upstash. This also removes the Upstash `2026-11-21` claim deadline.
 
-**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Final live Worker version: **`f211dd2f-18dc-4b6e-92fc-d4dead71c449`** on route `data.medxi.site/*`. A follow-up safety guard now activates Turnstile only when **both** `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` exist, so a half-configured secret cannot demand a challenge the page cannot render. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source.
+**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Worker version at the end of the Supabase migration: **`f211dd2f-18dc-4b6e-92fc-d4dead71c449`** on route `data.medxi.site/*`. A follow-up safety guard activates Turnstile only when **both** `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY` exist, so a half-configured secret cannot demand a challenge the page cannot render. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source. The current live Worker is **`86ae480d-eff5-4a8b-868d-75d181ed36ed`** (see §12).
 
 ### What changed
 
@@ -958,20 +958,57 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 | `worker-data-gate/src/index.js` | Replaced the Upstash `redisCmd`/`EVAL`/`SCAN` adapter with Supabase REST against one table `enf_state`. One row per user (`user:<uid>`) plus one `global` row; one GET returns the whole guard state. Global mode/features/providerCount are read fresh on every use (no stale cache), so admin toggles reach every isolate immediately. All reads/writes fail open. Score writes are state-change only (zero-score normal requests write nothing). Env values are trimmed/quote-stripped to avoid secret paste artifacts. |
 | `worker-data-gate/supabase-schema.sql` (new) | Table DDL, GIN index, RLS enabled with no client policies (service-role only), plus documented JSON shapes. |
 | `worker-data-gate/.dev.vars` | Holds `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` locally (gitignored, never printed). Live Worker secrets are set via `wrangler secret put`. |
-| `scripts/verify-phase4.cjs` | CRLF-safe `.dev.vars` parsing, plus a check that `/admin/enforcement` reports `sharedState: true` under the new adapter. 21 checks total; restores `shadow` + `progressiveUnlock=off` and deletes its temp identity. |
+| `scripts/verify-phase4.cjs` | CRLF-safe `.dev.vars` parsing, plus a check that `/admin/enforcement` reports `sharedState: true` under the new adapter. 22 checks total; disables Turnstile only for the deterministic run, then restores `shadow` + `progressiveUnlock=off` + `turnstile=on` and deletes its temp identity. |
 
 ### Verification results
 
-- `node scripts/verify-phase4.cjs`: **21/21 PASS** - canary injected into manifest, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile dormant, shared-state inspection correct. Re-run after the Turnstile both-key guard: **21/21 PASS** again.
-- Live `/admin/enforcement`: **`mode=shadow`**, `active=false`, `sharedState=true`, `turnstileConfigured=false`, `progressiveUnlock=false`.
-- Supabase table cleaned after testing: only the `global` row remains; all `user:*` test rows and the `probe:test` row were deleted.
-- Firebase Auth sweep: **1,617 users, 0** `phase4verify-*` / `manifestprobe-*` identities remaining.
+- `node scripts/verify-phase4.cjs`: **22/22 PASS** - canary injected into manifest, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile configured with the live widget keys, shared-state inspection correct. Mode restored to `shadow`, `progressiveUnlock=off`, `turnstile=on` after the run.
+- Live `/admin/enforcement` after final integration: **`mode=shadow`**, `active=false`, `sharedState=true`, `turnstileConfigured=true`, `progressiveUnlock=false`, all six enforcement features `on`.
+- Supabase table cleaned after testing: all temporary `user:*` test rows and the `probe:test` row were deleted; real user rows were left intact.
+- Firebase Auth sweep: **1,617 users, 0** `phase4verify-*` / `manifestprobe-*` identities remaining; the temporary `turnstileverify-*` identity was deleted.
 - Worker `node --check` and `wrangler deploy --dry-run` clean.
 
 ### Outstanding owner actions (revised)
 
-1. **Turnstile step-up:** create a Cloudflare Turnstile widget, set Worker secrets `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY`, and client `VITE_TURNSTILE_SITE_KEY`. Until then the challenge path never triggers.
+1. **Turnstile step-up:** completed — the existing widget is wired end-to-end (see §12). No owner setup remains.
 2. **Activation (owner approval required):** `/enforce active`, then optionally `/feature progressiveUnlock on`. Keep `shadow` until the owner is comfortable watching `/paused` and `/behaviour`.
 3. **Optional cleanup:** the old Upstash secrets can now be removed and the 2026-11-21 claim task closed; Supabase is the live shared state and fail-open still protects students if it is ever unavailable.
+
+---
+
+## 12. Phase 4c - Turnstile step-up wired to the existing widget (2026-11-18)
+
+**Status:** **LIVE, dormant behind `mode=shadow`.** The owner already created the widget; it was retrieved and wired using Cloudflare's "existing widget" flow. Nothing challenges a student until the master mode is `active`.
+
+### Widget
+
+| Property | Value |
+|---|---|
+| Site key (public) | `0x4AAAAAAGGxSAsXKgHZHbMk` |
+| Name | `medxi.site (Spin)` |
+| Type / clearance | Managed / `no_clearance` (normally invisible) |
+| Allowed domains | `medxi.site`, `localhost`, `127.0.0.1` (no `www` variant) |
+| Secret key | Retrieved with canonical Wrangler `4.164.0` from the pinned account `87e42b045dc2182ef8f54bd33ea8ee30`, validated with a dummy-token `siteverify` probe (`invalid-input-response`, no `invalid-input-secret`), then stored only as Worker secret `TURNSTILE_SECRET_KEY` and in the gitignored local `.dev.vars`. Never printed. |
+| Public key binding | Worker secret `TURNSTILE_SITE_KEY` |
+
+### Integration
+
+| File | Change |
+|---|---|
+| `worker-data-gate/src/index.js` | Canonical `siteverify` at `https://challenges.cloudflare.com/turnstile/v0/siteverify`. Requires `data.success === true`, `data.action === 'medxi_step_up'`, and `data.hostname` in `TURNSTILE_HOSTNAMES`. Missing/invalid token, wrong action, wrong hostname, non-OK response, timeout or network error all return `CHALLENGE_FAILED` (fail-closed once keys exist). `POST /api/challenge` marks the challenge on success. |
+| `worker-data-gate/wrangler.json` | `TURNSTILE_HOSTNAMES=medxi.site` production var. Local `.dev.vars` allows `localhost,127.0.0.1,medxi.site`. |
+| `src/firebase/config.js` | Widget renders with `action: 'medxi_step_up'`; `gatewayFetch()` handles `TURNSTILE_REQUIRED`, posts the token to `/api/challenge`, then retries once. No separate `VITE_TURNSTILE_SITE_KEY` needed — the Worker returns the site key in the challenge response. |
+| `scripts/verify-phase4.cjs` | Disables `turnstile` only for the deterministic canary test, then restores it to `on`. 22 checks. |
+
+**Deployments:** Worker **`86ae480d-eff5-4a8b-868d-75d181ed36ed`** on `data.medxi.site/*`; Pages **`361938cb`** (`https://361938cb.medxi.pages.dev`), bundles `index-Byb_HuhV.js` and `AuthContext-Dd3b8Qf4.js`.
+
+**Trigger conditions:** master mode `active` AND feature `turnstile=on` AND both keys present AND shared score `>= 2` AND no prior completed challenge. Because mode is still `shadow`, real traffic never sees the widget.
+
+### Validation
+
+- `node scripts/verify-phase4.cjs`: **22 passed, 0 failed**.
+- Real-token end-to-end from `https://medxi.site/app-update.html` (static page on the production hostname): fresh Turnstile token with `action=medxi_step_up` → `POST /api/challenge` returned **200 `{"success":true,"message":"Verification complete."}`**; replaying the same token returned **403 `CHALLENGE_FAILED`**. Siteverify reported `hostname=medxi.site`.
+- Dummy-token probe confirmed the stored secret is valid; no secret value was ever printed or committed.
+- Temporary Firebase identity and its Supabase state row were deleted after validation; no temp scripts remain.
 
 **Fail-open invariant unchanged:** any Supabase error, missing secret, timeout or quota edge returns `null`; `checkGuard` then reports no pause/revocation/score/challenge and the student keeps access. Master mode remains `shadow`, so nothing is enforced on real traffic during migration.
