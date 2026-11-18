@@ -933,7 +933,7 @@ Behaviour flags live in each Worker isolate's memory, so the admin view is a par
 
 ### Outstanding owner actions (no lockouts if delayed)
 
-1. **Claim the free Upstash DB before 2026-11-21:** https://upstash.com/start-redis/console/3d986754-7eb0-41b8-bdd6-298965f4ad1f — free, no card. Unclaimed databases are deleted; fail-open keeps students studying, but enforcement state would stop.
+1. ~~**Claim the free Upstash DB before 2026-11-21:** https://upstash.com/start-redis/console/3d986754-7eb0-41b8-bdd6-298965f4ad1f — free, no card. Unclaimed databases are deleted; fail-open keeps students studying, but enforcement state would stop.~~ **Superseded by Section 11:** Supabase is now the live shared state, so no claim is needed.
 2. **Turnstile step-up:** create a Cloudflare Turnstile widget, set Worker secrets `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY`, and client `VITE_TURNSTILE_SITE_KEY`. Until then the challenge path never triggers.
 3. **Activation (owner approval required):** `/enforce active`, then optionally `/feature progressiveUnlock on`. Keep `shadow` until the owner is comfortable watching `/paused` and `/behaviour`.
 
@@ -944,3 +944,34 @@ The existing 4-hour signed video/notes tokens keep working after a pause because
 ---
 
 **Definition of done:** Phases 0–5 accepted, all regression checks green in CI, and a red-team run against staging banks fewer than 60 files before an automatic, session-killing pause with an alert fired. **Phases 2 and 3 were intentionally delivered monitor-only**, so the "device enforced every request", "automatic pause", and "session revocation" metrics were **not** claimed met at those stages. **Phase 4 implements the enforcement machinery (shadow by default, `progressiveUnlock` off, Turnstile dormant until keys exist)** — the full "done" criteria apply only after the owner activates and validates in `active` mode.
+
+## 11. Phase 4b - Supabase shared-state migration (2026-11-18)
+
+**Reason:** Upstash free (500K commands/month) showed 1,630 commands in 49 minutes during verification, mostly from test traffic. Supabase Free lists 50,000 MAU, 500 MB DB, 5 GB egress and unlimited API requests at $0/month, which is far above this app's 1,604 registered users and ~1-2 MB of state. Owner chose migration over write-tuning Upstash. This also removes the Upstash `2026-11-21` claim deadline.
+
+**Status:** **LIVE.** Owner created the Free Supabase project and ran the schema. The first deploy exposed a corrupted live `SUPABASE_URL` secret (Worker log showed `Invalid URL: \u0016/rest/v1/...`); both secrets were refreshed from the local `.dev.vars` (values never printed) and the Worker redeployed. Final live Worker version: **`e97a4cba-ce0b-4bf8-8303-3ba7a390861f`** on route `data.medxi.site/*`. Upstash secrets remain locally as a rollback option but are no longer referenced by the Worker source.
+
+### What changed
+
+| File | Change |
+|---|---|
+| `worker-data-gate/src/index.js` | Replaced the Upstash `redisCmd`/`EVAL`/`SCAN` adapter with Supabase REST against one table `enf_state`. One row per user (`user:<uid>`) plus one `global` row; one GET returns the whole guard state. Global mode/features/providerCount are read fresh on every use (no stale cache), so admin toggles reach every isolate immediately. All reads/writes fail open. Score writes are state-change only (zero-score normal requests write nothing). Env values are trimmed/quote-stripped to avoid secret paste artifacts. |
+| `worker-data-gate/supabase-schema.sql` (new) | Table DDL, GIN index, RLS enabled with no client policies (service-role only), plus documented JSON shapes. |
+| `worker-data-gate/.dev.vars` | Holds `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` locally (gitignored, never printed). Live Worker secrets are set via `wrangler secret put`. |
+| `scripts/verify-phase4.cjs` | CRLF-safe `.dev.vars` parsing, plus a check that `/admin/enforcement` reports `sharedState: true` under the new adapter. 21 checks total; restores `shadow` + `progressiveUnlock=off` and deletes its temp identity. |
+
+### Verification results
+
+- `node scripts/verify-phase4.cjs`: **21/21 PASS** - canary injected into manifest, unlock batch 1 -> 2 after 40 trusted events, checkpoint jump raised shared score, canary hit returned `ACCOUNT_PAUSED` and appeared in `/admin/paused`, further access blocked with 403, `/admin/unpause` restored access, Turnstile dormant, shared-state inspection correct.
+- Live `/admin/enforcement`: **`mode=shadow`**, `active=false`, `sharedState=true`, `turnstileConfigured=false`, `progressiveUnlock=false`.
+- Supabase table cleaned after testing: only the `global` row remains; all `user:*` test rows and the `probe:test` row were deleted.
+- Firebase Auth sweep: **1,617 users, 0** `phase4verify-*` / `manifestprobe-*` identities remaining.
+- Worker `node --check` and `wrangler deploy --dry-run` clean.
+
+### Outstanding owner actions (revised)
+
+1. **Turnstile step-up:** create a Cloudflare Turnstile widget, set Worker secrets `TURNSTILE_SECRET_KEY` and `TURNSTILE_SITE_KEY`, and client `VITE_TURNSTILE_SITE_KEY`. Until then the challenge path never triggers.
+2. **Activation (owner approval required):** `/enforce active`, then optionally `/feature progressiveUnlock on`. Keep `shadow` until the owner is comfortable watching `/paused` and `/behaviour`.
+3. **Optional cleanup:** the old Upstash secrets can now be removed and the 2026-11-21 claim task closed; Supabase is the live shared state and fail-open still protects students if it is ever unavailable.
+
+**Fail-open invariant unchanged:** any Supabase error, missing secret, timeout or quota edge returns `null`; `checkGuard` then reports no pause/revocation/score/challenge and the student keeps access. Master mode remains `shadow`, so nothing is enforced on real traffic during migration.
