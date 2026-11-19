@@ -1071,3 +1071,28 @@ Started for owner review:
 **Untouched:** the owner's in-progress, uncommitted DAMS catalog changes in `D:\NEW\mcq-app` (`public/videos_catalog.json`, `src/pages/VideoSection.jsx`, `worker-data-gate/*`, `scratch/`, `deploy/video_stream_map.json`) and all uncommitted scrape files in this repository. They were not built or deployed.
 
 **Final state:** `/admin/enforcement` still reports `mode=shadow`, `progressiveUnlock=false`, `turnstileConfigured=true`. Enforcement activation still requires explicit owner approval.
+
+---
+
+## 15. Production incident - blank white screen from poisoned asset cache (2026-11-19)
+
+**Report:** `the app is showing blanck screen of white colour` after the `4f42de9a` deploy.
+
+**Browser evidence:** console error `Failed to load module script: Expected a JavaScript-or-Wasm module script but the server responded with a MIME type of "text/html"`, source `https://medxi.site/assets/index-7kkd402c.js`.
+
+**Root cause:** Cloudflare caches `/assets/*` as `immutable` (`public/_headers`) and the SPA catch-all (`/* /index.html 200`) was serving `index.html` for the new bundle URL while it propagated. That HTML response was cached under the exact asset URL for same-origin requests. A query string on the entry script was not enough: lazy chunks circular-import the entry by its bare filename, so loading a stale copy of `MedicalNewsHome-*.js` requested `index-7kkd402c.js` and broke the module graph.
+
+**Fix:**
+- Clean worktree at `7d75673`, built from committed sources only (owner's uncommitted DAMS work was not built or deployed).
+- Deployed intermediate cache-busted builds (`71b233a6`, `4aa03c50`, `43602622`) while diagnosing the circular-import edge case.
+- Final production deployment: **`e239e019`**, built after adding a per-build tag to every emitted asset filename in `vite.config.js` (`[name]-[hash]-<buildTag>`). Every deploy now emits fresh filenames, so a poisoned URL from a previous deploy can never be reused. Live entry: `index-xCwLTkmc-mwnhavlv.js`.
+- Committed and pushed to `main`: `6c72ebe` (`fix: tag built assets per deploy to avoid stale edge cache`). Old deployments were not deleted.
+
+**Verification:**
+- Fresh browser tabs render the full MedXI Dispatch home page; zero console errors.
+- `/video` loads without module errors.
+- All static and 46 lazy asset URLs return `application/javascript` when requested with `Origin: https://medxi.site`.
+- No references to the three poisoned/stale entry hashes remain in live HTML.
+- Existing Cloudflare token has `zone (read)` only, so a direct cache purge returned `401`; the build-tag approach avoids needing `zone:edit`.
+
+**Untouched:** owner's uncommitted DAMS catalog work and all scrape files in this repository. Worker code, secrets, enforcement thresholds and `mode=shadow` were not changed.
