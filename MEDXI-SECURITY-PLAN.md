@@ -1053,3 +1053,21 @@ Started for owner review:
 - Current Worker: **`ede2599d-4ff8-488b-8fe0-6829443e25f7`**.
 
 **Activation still requires owner approval.** No real traffic is enforced while `mode=shadow`.
+
+---
+
+## 14. Production incident - stale frontend bundle broke videos and notes (2026-11-19)
+
+**Report:** `Diagnosis: Page Not Found` on every video and note, while QBank worked.
+
+**Root cause:** the Cloudflare Pages Git integration auto-deploys `main`. All security/gateway frontend work lived on `security/phase-0`, so production `medxi.site` was still serving an old `main` bundle (`index-HrcbjG3d.js` / `AuthContext-BsNT2zbs.js`) that redirected straight to `stream.medxi.site/watch/...`. Commit `ef38ad7` later blocked direct stream access at the edge and origin, so those direct links began returning empty `403`. QBank kept working because it already fetched through `data.medxi.site`. The "Page Not Found" screen came from the SPA catch-all on navigation failures, not from the gateway player pages.
+
+**Fix:**
+- Verified the committed gateway path end-to-end: note `AgADMS7038` -> `200` `MedXI Notes` player page; video `marrow_biochem_1` -> `200` `MedXI Stream` player page; no `Diagnosis: Page Not Found`.
+- Merged `security/phase-0` into `main` in a clean temporary worktree and pushed (`7d75673`) so future automated main deploys keep the gateway code.
+- Deployed a clean build of that merge to production: **`4f42de9a`**. No old deployments were deleted.
+- Live `medxi.site` now serves `index-7kkd402c.js` + `AuthContext-Dd3b8Qf4.js`; the deployed bundle contains `api/media/url` and `playerUrl`.
+
+**Untouched:** the owner's in-progress, uncommitted DAMS catalog changes in `D:\NEW\mcq-app` (`public/videos_catalog.json`, `src/pages/VideoSection.jsx`, `worker-data-gate/*`, `scratch/`, `deploy/video_stream_map.json`) and all uncommitted scrape files in this repository. They were not built or deployed.
+
+**Final state:** `/admin/enforcement` still reports `mode=shadow`, `progressiveUnlock=false`, `turnstileConfigured=true`. Enforcement activation still requires explicit owner approval.
